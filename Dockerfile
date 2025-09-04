@@ -26,9 +26,18 @@ RUN set -eux; \
 ARG PYTHON_VERSION=3.11
 ENV MAMBA_ROOT_PREFIX=/opt/conda
 ADD https://micro.mamba.pm/api/micromamba/linux-64/latest micromamba.tar.bz2
+# micromamba の取得とセットアップ（壊れたキャッシュ対策つき）
 RUN set -eux; \
     mkdir -p ${MAMBA_ROOT_PREFIX}; \
-    tar -xjf micromamba.tar.bz2 -C /usr/local/bin --strip-components=1 bin/micromamba; \
+    curl -fsSL -o /tmp/micromamba.tar.bz2 "https://micro.mamba.pm/api/micromamba/linux-64/latest"; \
+    if tar -tjf /tmp/micromamba.tar.bz2 | grep -q '^bin/micromamba$'; then \
+      tar -xjf /tmp/micromamba.tar.bz2 -C /usr/local/bin --strip-components=1 bin/micromamba; \
+    else \
+      echo "micromamba tar layout unexpected; falling back to install.sh"; \
+      curl -fsSL -o /tmp/install_micromamba.sh https://micro.mamba.pm/install.sh; \
+      bash /tmp/install_micromamba.sh -b -p ${MAMBA_ROOT_PREFIX}; \
+      ln -sf ${MAMBA_ROOT_PREFIX}/bin/micromamba /usr/local/bin/micromamba; \
+    fi; \
     micromamba --version; \
     micromamba shell init -s bash -p ${MAMBA_ROOT_PREFIX}; \
     echo "export PATH=${MAMBA_ROOT_PREFIX}/bin:\$PATH" > /etc/profile.d/mamba.sh
