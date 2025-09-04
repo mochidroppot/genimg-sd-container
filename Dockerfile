@@ -1,5 +1,5 @@
 # ベース: NVIDIA 公式 CUDA + cuDNN (Ubuntu 22.04)
-FROM nvidia/cuda:12.2.0-cudnn8-runtime-ubuntu22.04
+FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
 
 # 非対話設定と基本ツール
 ENV DEBIAN_FRONTEND=noninteractive \
