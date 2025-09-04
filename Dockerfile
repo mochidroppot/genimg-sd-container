@@ -1,82 +1,86 @@
-# ベース: NVIDIA 公式 CUDA + cuDNN (Ubuntu 22.04)
+# ベース: NVIDIA 公式 CUDA + cuDNN (Ubuntu 22.04) - CUDA 12.1
 FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
 
-# 非対話設定と基本ツール
 ENV DEBIAN_FRONTEND=noninteractive \
     TZ=Etc/UTC \
     SHELL=/bin/bash \
     PIP_NO_CACHE_DIR=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    # NVIDIA ランタイム向け
     NVIDIA_VISIBLE_DEVICES=all \
     NVIDIA_DRIVER_CAPABILITIES=compute,utility
 
-# Tini: プロセス管理（Jupyter 等の安定化に必須）
+# Tini: プロセス管理（Jupyter 等の安定化に有用）
 ENV TINI_VERSION=v0.19.0
 ADD https://github.com/krallin/tini/releases/download/${TINI_VERSION}/tini /tini
+
+# 基本ツール（micromamba 展開に bzip2 必須）
 RUN set -eux; \
     chmod +x /tini && \
     apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates curl git nano vim tzdata build-essential \
-      libgl1 libglib2.0-0 openssh-client && \
+      libgl1 libglib2.0-0 openssh-client bzip2 pkg-config && \
     rm -rf /var/lib/apt/lists/*
 
-# micromamba で Python 環境を構築
-ARG MAMBA_USER=mambauser
+# micromamba を root でインストール（/usr/local/bin へ配置）
 ARG PYTHON_VERSION=3.11
 ENV MAMBA_ROOT_PREFIX=/opt/conda
-SHELL ["/bin/bash", "-lc"]
-
-# 非 root ユーザー（Paperspace 実行時の権限分離・ファイルパーミッション安定化）
-RUN set -eux; \
-    useradd -m -s /bin/bash ${MAMBA_USER} && \
-    chown -R ${MAMBA_USER}:${MAMBA_USER} /home/${MAMBA_USER}
-USER ${MAMBA_USER}
-
-# micromamba インストール
-WORKDIR /home/${MAMBA_USER}
 ADD https://micro.mamba.pm/api/micromamba/linux-64/latest micromamba.tar.bz2
 RUN set -eux; \
     mkdir -p ${MAMBA_ROOT_PREFIX}; \
-    tar -xjf micromamba.tar.bz2 -C /tmp && \
-    /tmp/bin/micromamba shell init -s bash -p ${MAMBA_ROOT_PREFIX} && \
-    echo 'export PATH="${MAMBA_ROOT_PREFIX}/bin:${PATH}"' >> ~/.bashrc && \
-    source ~/.bashrc && \
-    micromamba create -y -n pyenv python=${PYTHON_VERSION} && \
+    tar -xjf micromamba.tar.bz2 -C /usr/local/bin --strip-components=1 bin/micromamba; \
+    micromamba --version; \
+    micromamba shell init -s bash -p ${MAMBA_ROOT_PREFIX}; \
+    echo "export PATH=${MAMBA_ROOT_PREFIX}/bin:\$PATH" > /etc/profile.d/mamba.sh
+
+# Python 環境（env 名ではなく -p で絶対パス指定：レイヤーをまたいでも安全）
+RUN set -eux; \
+    micromamba create -y -p ${MAMBA_ROOT_PREFIX}/envs/pyenv python=${PYTHON_VERSION}; \
+    micromamba run -p ${MAMBA_ROOT_PREFIX}/envs/pyenv python -m pip install --upgrade pip && \
     micromamba clean -a -y
+
+# Python ライブラリ（Jupyter/TensorBoard 等）
+RUN set -eux; \
+    micromamba run -p ${MAMBA_ROOT_PREFIX}/envs/pyenv pip install \
+      jupyterlab==4.* notebook ipywidgets jupyterlab-git tensorboard \
+      matplotlib seaborn pandas numpy scipy tqdm rich && \
+    micromamba clean -a -y
+
+# アプリ用ディレクトリと ComfyUI の取得
+RUN set -eux; \
+    mkdir -p /opt/app && \
+    git clone https://github.com/comfyanonymous/ComfyUI.git /opt/app/ComfyUI
+
+# PyTorch（CUDA 12.1 と整合する cu121 ホイールを使用）
+RUN set -eux; \
+    micromamba run -p ${MAMBA_ROOT_PREFIX}/envs/pyenv pip install --index-url https://download.pytorch.org/whl/cu121 torch torchvision && \
+    micromamba run -p ${MAMBA_ROOT_PREFIX}/envs/pyenv pip install -r /opt/app/ComfyUI/requirements.txt && \
+    micromamba clean -a -y
+
+# 非 root ユーザー作成（最後に所有権を調整）
+ARG MAMBA_USER=mambauser
+RUN set -eux; \
+    useradd -m -s /bin/bash ${MAMBA_USER}; \
+    chown -R ${MAMBA_USER}:${MAMBA_USER} /home/${MAMBA_USER}; \
+    chown -R ${MAMBA_USER}:${MAMBA_USER} ${MAMBA_ROOT_PREFIX}; \
+    chown -R ${MAMBA_USER}:${MAMBA_USER} /opt/app
+
+USER ${MAMBA_USER}
 ENV PATH=${MAMBA_ROOT_PREFIX}/envs/pyenv/bin:${MAMBA_ROOT_PREFIX}/bin:${PATH}
 ENV CONDA_DEFAULT_ENV=pyenv
 
-WORKDIR /opt/app
-RUN git clone https://github.com/comfyanonymous/ComfyUI.git
-
-# Python ライブラリ
-RUN pip install --upgrade pip && \
-    pip install \
-      jupyterlab==4.* \
-      notebook \
-      ipywidgets \
-      jupyterlab-git \
-      tensorboard \
-      matplotlib seaborn pandas numpy scipy \
-      tqdm rich && \
-    pip install --index-url https://download.pytorch.org/whl/cu124 torch torchvision && \
-    pip install -r /opt/app/ComfyUI/requirements.txt && \
-    pip cache purge
-
 # ノートブック/データ用の作業ディレクトリ
-RUN mkdir -p /workspace && mkdir -p /workspace/data && mkdir -p /workspace/notebooks
+RUN mkdir -p /workspace /workspace/data /workspace/notebooks
 WORKDIR /workspace
 
 # ポート公開（Jupyter/TensorBoard）
 EXPOSE 8888 6006
 
-# ヘルスチェック（Jupyter が立ち上がっているか簡易確認）
+# ヘルスチェック
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=5 \
   CMD bash -lc 'ss -ltn | grep -E ":8888|:6006" >/dev/null || exit 1'
 
-# Entrypoint: Tini 経由で安定実行
+# Entrypoint: Tini 経由
 USER root
 ENTRYPOINT ["/tini", "--"]
 USER ${MAMBA_USER}
