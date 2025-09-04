@@ -1,6 +1,16 @@
-# ベース: NVIDIA 公式 CUDA + cuDNN (Ubuntu 22.04) - CUDA 12.1
+# ----------------------------------------------------------------------------
+# Image for Paperspace Notebook (GPU) running JupyterLab + ComfyUI + TensorBoard
+# - Base: NVIDIA CUDA 12.1 runtime (Ubuntu 22.04) with cuDNN 8
+# - Package manager: micromamba (conda-compatible)
+# - Default: launches JupyterLab on port 8888 and TensorBoard on port 6006
+# ----------------------------------------------------------------------------
 FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
 
+# ------------------------------
+# Build-time and runtime settings
+# ------------------------------
+ARG PYTHON_VERSION=3.11
+ARG MAMBA_USER=mambauser
 ENV DEBIAN_FRONTEND=noninteractive \
     TZ=Etc/UTC \
     SHELL=/bin/bash \
@@ -10,24 +20,30 @@ ENV DEBIAN_FRONTEND=noninteractive \
     NVIDIA_VISIBLE_DEVICES=all \
     NVIDIA_DRIVER_CAPABILITIES=compute,utility
 
-# Tini: プロセス管理（Jupyter 等の安定化に有用）
+# ------------------------------
+# Tini (PID 1 init) for stable process handling inside containers
+# ------------------------------
 ENV TINI_VERSION=v0.19.0
 ADD https://github.com/krallin/tini/releases/download/${TINI_VERSION}/tini /tini
 
-# 基本ツール（micromamba 展開に bzip2 必須）
+# ------------------------------
+# Base packages
+# - bzip2: extract micromamba tarball
+# - libgl1/libglib2.0-0: common GUI/ML deps
+# - iproute2: provides `ss` used in HEALTHCHECK
+# ------------------------------
 RUN set -eux; \
     chmod +x /tini && \
     apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates curl git nano vim tzdata build-essential \
-      libgl1 libglib2.0-0 openssh-client bzip2 pkg-config && \
+      libgl1 libglib2.0-0 openssh-client bzip2 pkg-config iproute2 && \
     rm -rf /var/lib/apt/lists/*
 
-# micromamba を root でインストール（/usr/local/bin へ配置）
-ARG PYTHON_VERSION=3.11
+# ------------------------------
+# micromamba (system-wide)
+# ------------------------------
 ENV MAMBA_ROOT_PREFIX=/opt/conda
-ADD https://micro.mamba.pm/api/micromamba/linux-64/latest micromamba.tar.bz2
-
-# micromamba の取得とセットアップ（壊れたキャッシュ対策つき）
+# Retrieve micromamba and install to /usr/local/bin; fall back to install.sh if layout changes
 RUN set -eux; \
     mkdir -p ${MAMBA_ROOT_PREFIX}; \
     curl -fsSL -o /tmp/micromamba.tar.bz2 "https://micro.mamba.pm/api/micromamba/linux-64/latest"; \
@@ -42,84 +58,97 @@ RUN set -eux; \
     micromamba --version; \
     echo "export PATH=${MAMBA_ROOT_PREFIX}/bin:\$PATH" > /etc/profile.d/mamba.sh
 
-# Python 環境の作成（絶対パス指定で安全に）
+# ------------------------------
+# Python environment (isolated prefix)
+# ------------------------------
 RUN set -eux; \
     micromamba create -y -p ${MAMBA_ROOT_PREFIX}/envs/pyenv python=${PYTHON_VERSION}; \
     micromamba run -p ${MAMBA_ROOT_PREFIX}/envs/pyenv python -m pip install --upgrade pip && \
     micromamba clean -a -y
 
-# 以降の pip/conda 操作は micromamba run -p で実行
+# All following conda/pip operations should use micromamba run -p
 ENV PATH=${MAMBA_ROOT_PREFIX}/envs/pyenv/bin:${MAMBA_ROOT_PREFIX}/bin:${PATH}
 
-# Python ライブラリ（Jupyter/TensorBoard 等）
+# ------------------------------
+# Core Python libraries for Notebook workflows
+# ------------------------------
 RUN set -eux; \
     micromamba run -p ${MAMBA_ROOT_PREFIX}/envs/pyenv pip install \
       jupyterlab==4.* notebook ipywidgets jupyterlab-git tensorboard \
       matplotlib seaborn pandas numpy scipy tqdm rich && \
     micromamba clean -a -y
 
-# アプリ用ディレクトリと ComfyUI の取得
+# ------------------------------
+# Application: ComfyUI
+# ------------------------------
 RUN set -eux; \
     mkdir -p /opt/app && \
     git clone https://github.com/comfyanonymous/ComfyUI.git /opt/app/ComfyUI
 
-# PyTorch（CUDA 12.1 と整合する cu121 ホイールを使用）
+# PyTorch (CUDA 12.1 wheels) + ComfyUI requirements
 RUN set -eux; \
     micromamba run -p ${MAMBA_ROOT_PREFIX}/envs/pyenv pip install --index-url https://download.pytorch.org/whl/cu121 torch torchvision && \
     micromamba run -p ${MAMBA_ROOT_PREFIX}/envs/pyenv pip install -r /opt/app/ComfyUI/requirements.txt && \
     micromamba clean -a -y
 
-# 非 root ユーザー作成（最後に所有権を調整）
-ARG MAMBA_USER=mambauser
+# ------------------------------
+# Non-root user for interactive sessions
+# ------------------------------
 RUN set -eux; \
     useradd -m -s /bin/bash ${MAMBA_USER}; \
     chown -R ${MAMBA_USER}:${MAMBA_USER} /home/${MAMBA_USER}; \
     chown -R ${MAMBA_USER}:${MAMBA_USER} ${MAMBA_ROOT_PREFIX}; \
     chown -R ${MAMBA_USER}:${MAMBA_USER} /opt/app
 
-# ノートブック/データ用の作業ディレクトリ
+# Workspace directories for notebooks and data
 RUN mkdir -p /workspace /workspace/data /workspace/notebooks
 WORKDIR /workspace
 
+# Switch to non-root; set Python env in PATH
 USER ${MAMBA_USER}
 ENV PATH=${MAMBA_ROOT_PREFIX}/envs/pyenv/bin:${MAMBA_ROOT_PREFIX}/bin:${PATH}
 ENV CONDA_DEFAULT_ENV=pyenv
 
-# ヘルスチェック
+# ------------------------------
+# Healthcheck (Jupyter 8888 / TensorBoard 6006)
+# ------------------------------
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=5 \
   CMD bash -lc 'ss -ltn | grep -E ":8888|:6006" >/dev/null || exit 1'
 
-# Entrypoint: Tini 経由
+# ------------------------------
+# Entrypoint via Tini
+# ------------------------------
 USER root
 WORKDIR /workspace
 
+# Cache directories (Paperspace persistent volume typically mounted at /storage)
 ENV TENSORBOARD_LOGDIR=/storage/runs \
     HF_HOME=/storage/.cache/huggingface \
     HUGGINGFACE_HUB_CACHE=/storage/.cache/huggingface \
     TRANSFORMERS_CACHE=/storage/.cache/huggingface \
     PIP_CACHE_DIR=/storage/.cache/pip
 
-# 起動用 ENTRYPOINT スクリプトを用意（TB を起動し、渡されたコマンドを実行）
+# Prepare entrypoint script
 RUN printf '%s\n' '#!/usr/bin/env bash' \
   'set -euo pipefail' \
   '' \
-  '# 1) ComfyUI 永続ディレクトリのセットアップ' \
+  '# 1) Setup persistent directories for ComfyUI' \
   'PERSIST_BASE="/storage/comfyui"' \
   'APP_BASE="/opt/app/ComfyUI"' \
   'mkdir -p "${PERSIST_BASE}/models" "${PERSIST_BASE}/custom_nodes" "${PERSIST_BASE}/input" "${PERSIST_BASE}/output"' \
   '' \
   'link_dir() {' \
   '  local src="$1"; local dst="$2";' \
-  '  # 既にシンボリックリンクならそのまま' \
+  '  # If already a symlink, nothing to do' \
   '  if [ -L "$src" ]; then return 0; fi' \
-  '  # 既存ディレクトリに内容があれば永続側へ移行（初回のみ）' \
+  '  # If a real dir with content exists, migrate to persistent side once' \
   '  if [ -d "$src" ] && [ -n "$(ls -A "$src" 2>/dev/null || true)" ]; then' \
   '    echo "Migrating existing data from $src to $dst ..."' \
   '    mkdir -p "$dst"' \
   '    cp -a "$src"/. "$dst"/' \
   '    rm -rf "$src"' \
   '  fi' \
-  '  # シンボリックリンクを作成' \
+  '  # Create/update symlink' \
   '  ln -sfn "$dst" "$src"' \
   '}' \
   '' \
@@ -128,13 +157,13 @@ RUN printf '%s\n' '#!/usr/bin/env bash' \
   'link_dir "${APP_BASE}/input" "${PERSIST_BASE}/input"' \
   'link_dir "${APP_BASE}/output" "${PERSIST_BASE}/output"' \
   '' \
-  '# 2) キャッシュ/ログのディレクトリも作成' \
+  '# 2) Ensure cache/log directories exist' \
   'mkdir -p "${TENSORBOARD_LOGDIR:-/storage/runs}" "${HF_HOME:-/storage/.cache/huggingface}" "${PIP_CACHE_DIR:-/storage/.cache/pip}"' \
   '' \
-  '# 3) TensorBoard をバックグラウンド起動' \
+  '# 3) Start TensorBoard in the background' \
   '(tensorboard --logdir "${TENSORBOARD_LOGDIR:-/storage/runs}" --host 0.0.0.0 --port 6006 >/tmp/tensorboard.log 2>&1 &)' \
   '' \
-  '# 4) Paperspace が与えるコマンド（例: jupyter lab ...）をそのまま実行。無ければデフォルト起動' \
+  '# 4) Execute given command (e.g., from Paperspace), else launch JupyterLab' \
   'if [ "$#" -gt 0 ]; then' \
   '  exec "$@"' \
   'else' \
@@ -144,11 +173,11 @@ RUN printf '%s\n' '#!/usr/bin/env bash' \
   chmod +x /usr/local/bin/entrypoint.sh && \
   chown ${MAMBA_USER}:${MAMBA_USER} /usr/local/bin/entrypoint.sh
 
-# ポート公開（Jupyter/TensorBoard）
+# Expose Jupyter and TensorBoard ports
 EXPOSE 8888 6006
 
 ENTRYPOINT ["/tini", "--", "/usr/local/bin/entrypoint.sh"]
 USER ${MAMBA_USER}
 
-# デフォルト起動（JupyterLab）
+# Default command (JupyterLab)
 CMD ["jupyter", "lab", "--ip=0.0.0.0", "--port=8888", "--no-browser", "--ServerApp.token=", "--ServerApp.password="]
