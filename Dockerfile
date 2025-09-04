@@ -77,13 +77,13 @@ RUN set -eux; \
     chown -R ${MAMBA_USER}:${MAMBA_USER} ${MAMBA_ROOT_PREFIX}; \
     chown -R ${MAMBA_USER}:${MAMBA_USER} /opt/app
 
-USER ${MAMBA_USER}
-ENV PATH=${MAMBA_ROOT_PREFIX}/envs/pyenv/bin:${MAMBA_ROOT_PREFIX}/bin:${PATH}
-ENV CONDA_DEFAULT_ENV=pyenv
-
 # ノートブック/データ用の作業ディレクトリ
 RUN mkdir -p /workspace /workspace/data /workspace/notebooks
 WORKDIR /workspace
+
+USER ${MAMBA_USER}
+ENV PATH=${MAMBA_ROOT_PREFIX}/envs/pyenv/bin:${MAMBA_ROOT_PREFIX}/bin:${PATH}
+ENV CONDA_DEFAULT_ENV=pyenv
 
 # ポート公開（Jupyter/TensorBoard）
 EXPOSE 8888 6006
