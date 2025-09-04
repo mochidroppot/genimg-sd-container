@@ -85,17 +85,70 @@ USER ${MAMBA_USER}
 ENV PATH=${MAMBA_ROOT_PREFIX}/envs/pyenv/bin:${MAMBA_ROOT_PREFIX}/bin:${PATH}
 ENV CONDA_DEFAULT_ENV=pyenv
 
-# ポート公開（Jupyter/TensorBoard）
-EXPOSE 8888 6006
-
 # ヘルスチェック
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=5 \
   CMD bash -lc 'ss -ltn | grep -E ":8888|:6006" >/dev/null || exit 1'
 
 # Entrypoint: Tini 経由
 USER root
-ENTRYPOINT ["/tini", "--"]
+WORKDIR /workspace
+
+ENV TENSORBOARD_LOGDIR=/storage/runs \
+    HF_HOME=/storage/.cache/huggingface \
+    HUGGINGFACE_HUB_CACHE=/storage/.cache/huggingface \
+    TRANSFORMERS_CACHE=/storage/.cache/huggingface \
+    PIP_CACHE_DIR=/storage/.cache/pip
+
+# 起動用 ENTRYPOINT スクリプトを用意（TB を起動し、渡されたコマンドを実行）
+RUN printf '%s\n' '#!/usr/bin/env bash' \
+  'set -euo pipefail' \
+  '' \
+  '# 1) ComfyUI 永続ディレクトリのセットアップ' \
+  'PERSIST_BASE="/storage/comfyui"' \
+  'APP_BASE="/opt/app/ComfyUI"' \
+  'mkdir -p "${PERSIST_BASE}/models" "${PERSIST_BASE}/custom_nodes" "${PERSIST_BASE}/input" "${PERSIST_BASE}/output"' \
+  '' \
+  'link_dir() {' \
+  '  local src="$1"; local dst="$2";' \
+  '  # 既にシンボリックリンクならそのまま' \
+  '  if [ -L "$src" ]; then return 0; fi' \
+  '  # 既存ディレクトリに内容があれば永続側へ移行（初回のみ）' \
+  '  if [ -d "$src" ] && [ -n "$(ls -A "$src" 2>/dev/null || true)" ]; then' \
+  '    echo "Migrating existing data from $src to $dst ..."' \
+  '    mkdir -p "$dst"' \
+  '    cp -a "$src"/. "$dst"/' \
+  '    rm -rf "$src"' \
+  '  fi' \
+  '  # シンボリックリンクを作成' \
+  '  ln -sfn "$dst" "$src"' \
+  '}' \
+  '' \
+  'link_dir "${APP_BASE}/models" "${PERSIST_BASE}/models"' \
+  'link_dir "${APP_BASE}/custom_nodes" "${PERSIST_BASE}/custom_nodes"' \
+  'link_dir "${APP_BASE}/input" "${PERSIST_BASE}/input"' \
+  'link_dir "${APP_BASE}/output" "${PERSIST_BASE}/output"' \
+  '' \
+  '# 2) キャッシュ/ログのディレクトリも作成' \
+  'mkdir -p "${TENSORBOARD_LOGDIR:-/storage/runs}" "${HF_HOME:-/storage/.cache/huggingface}" "${PIP_CACHE_DIR:-/storage/.cache/pip}"' \
+  '' \
+  '# 3) TensorBoard をバックグラウンド起動' \
+  '(tensorboard --logdir "${TENSORBOARD_LOGDIR:-/storage/runs}" --host 0.0.0.0 --port 6006 >/tmp/tensorboard.log 2>&1 &)' \
+  '' \
+  '# 4) Paperspace が与えるコマンド（例: jupyter lab ...）をそのまま実行。無ければデフォルト起動' \
+  'if [ "$#" -gt 0 ]; then' \
+  '  exec "$@"' \
+  'else' \
+  '  exec jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --ServerApp.token= --ServerApp.password=' \
+  'fi' \
+  > /usr/local/bin/entrypoint.sh && \
+  chmod +x /usr/local/bin/entrypoint.sh && \
+  chown ${MAMBA_USER}:${MAMBA_USER} /usr/local/bin/entrypoint.sh
+
+# ポート公開（Jupyter/TensorBoard）
+EXPOSE 8888 6006
+
+ENTRYPOINT ["/tini", "--", "/usr/local/bin/entrypoint.sh"]
 USER ${MAMBA_USER}
 
 # デフォルト起動（JupyterLab）
-CMD ["bash", "-lc", "jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --NotebookApp.token='' --NotebookApp.password='' --allow-root"]
+CMD ["jupyter", "lab", "--ip=0.0.0.0", "--port=8888", "--no-browser", "--ServerApp.token=", "--ServerApp.password="]
