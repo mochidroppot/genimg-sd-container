@@ -26,6 +26,7 @@ RUN set -eux; \
 ARG PYTHON_VERSION=3.11
 ENV MAMBA_ROOT_PREFIX=/opt/conda
 ADD https://micro.mamba.pm/api/micromamba/linux-64/latest micromamba.tar.bz2
+
 # micromamba の取得とセットアップ（壊れたキャッシュ対策つき）
 RUN set -eux; \
     mkdir -p ${MAMBA_ROOT_PREFIX}; \
@@ -39,14 +40,16 @@ RUN set -eux; \
       ln -sf ${MAMBA_ROOT_PREFIX}/bin/micromamba /usr/local/bin/micromamba; \
     fi; \
     micromamba --version; \
-    micromamba shell init -s bash -p ${MAMBA_ROOT_PREFIX}; \
     echo "export PATH=${MAMBA_ROOT_PREFIX}/bin:\$PATH" > /etc/profile.d/mamba.sh
 
-# Python 環境（env 名ではなく -p で絶対パス指定：レイヤーをまたいでも安全）
+# Python 環境の作成（絶対パス指定で安全に）
 RUN set -eux; \
     micromamba create -y -p ${MAMBA_ROOT_PREFIX}/envs/pyenv python=${PYTHON_VERSION}; \
     micromamba run -p ${MAMBA_ROOT_PREFIX}/envs/pyenv python -m pip install --upgrade pip && \
     micromamba clean -a -y
+
+# 以降の pip/conda 操作は micromamba run -p で実行
+ENV PATH=${MAMBA_ROOT_PREFIX}/envs/pyenv/bin:${MAMBA_ROOT_PREFIX}/bin:${PATH}
 
 # Python ライブラリ（Jupyter/TensorBoard 等）
 RUN set -eux; \
