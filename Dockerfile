@@ -1,10 +1,10 @@
 # ----------------------------------------------------------------------------
 # Image for Paperspace Notebook (GPU) running JupyterLab + ComfyUI + TensorBoard
-# - Base: NVIDIA CUDA 12.1 runtime (Ubuntu 22.04) with cuDNN 8
+# - Base: NVIDIA CUDA 12.4 runtime (Ubuntu 22.04) with cuDNN
 # - Package manager: micromamba (conda-compatible)
 # - Default: launches JupyterLab on port 8888 and TensorBoard on port 6006
 # ----------------------------------------------------------------------------
-FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
+FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
 
 # ------------------------------
 # Build-time and runtime settings
@@ -74,7 +74,7 @@ ENV PATH=${MAMBA_ROOT_PREFIX}/envs/pyenv/bin:${MAMBA_ROOT_PREFIX}/bin:${PATH}
 # ------------------------------
 RUN set -eux; \
     micromamba run -p ${MAMBA_ROOT_PREFIX}/envs/pyenv pip install \
-      jupyterlab==4.* notebook ipywidgets jupyterlab-git tensorboard \
+      jupyterlab==4.* notebook ipywidgets jupyterlab-git jupyter-server-proxy tensorboard \
       matplotlib seaborn pandas numpy scipy tqdm rich && \
     micromamba clean -a -y
 
@@ -85,9 +85,9 @@ RUN set -eux; \
     mkdir -p /opt/app && \
     git clone https://github.com/comfyanonymous/ComfyUI.git /opt/app/ComfyUI
 
-# PyTorch (CUDA 12.1 wheels) + ComfyUI requirements
+# PyTorch (CUDA 12.4 wheels) + ComfyUI requirements
 RUN set -eux; \
-    micromamba run -p ${MAMBA_ROOT_PREFIX}/envs/pyenv pip install --index-url https://download.pytorch.org/whl/cu121 torch torchvision && \
+    micromamba run -p ${MAMBA_ROOT_PREFIX}/envs/pyenv pip install --index-url https://download.pytorch.org/whl/cu124 torch torchvision && \
     micromamba run -p ${MAMBA_ROOT_PREFIX}/envs/pyenv pip install -r /opt/app/ComfyUI/requirements.txt && \
     micromamba clean -a -y
 
@@ -113,7 +113,7 @@ ENV CONDA_DEFAULT_ENV=pyenv
 # Healthcheck (Jupyter 8888 / TensorBoard 6006)
 # ------------------------------
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=5 \
-  CMD bash -lc 'ss -ltn | grep -E ":8888|:6006" >/dev/null || exit 1'
+  CMD bash -lc 'ss -ltn | grep -E ":8888|:6006|:8188" >/dev/null || exit 1'
 
 # ------------------------------
 # Entrypoint via Tini
@@ -126,7 +126,8 @@ ENV TENSORBOARD_LOGDIR=/storage/runs \
     HF_HOME=/storage/.cache/huggingface \
     HUGGINGFACE_HUB_CACHE=/storage/.cache/huggingface \
     TRANSFORMERS_CACHE=/storage/.cache/huggingface \
-    PIP_CACHE_DIR=/storage/.cache/pip
+    PIP_CACHE_DIR=/storage/.cache/pip \
+    COMFYUI_PORT=8188
 
 # Prepare entrypoint script
 RUN printf '%s\n' '#!/usr/bin/env bash' \
@@ -163,7 +164,10 @@ RUN printf '%s\n' '#!/usr/bin/env bash' \
   '# 3) Start TensorBoard in the background' \
   '(tensorboard --logdir "${TENSORBOARD_LOGDIR:-/storage/runs}" --host 0.0.0.0 --port 6006 >/tmp/tensorboard.log 2>&1 &)' \
   '' \
-  '# 4) Execute given command (e.g., from Paperspace), else launch JupyterLab' \
+  '# 4) Start ComfyUI in the background (loopback-only; reachable via JupyterLab proxy at /proxy/${COMFYUI_PORT}/)' \
+  '(cd "${APP_BASE}" && python main.py --listen 127.0.0.1 --port "${COMFYUI_PORT:-8188}" >/tmp/comfyui.log 2>&1 &)' \
+  '' \
+  '# 5) Execute given command (e.g., from Paperspace), else launch JupyterLab' \
   'if [ "$#" -gt 0 ]; then' \
   '  exec "$@"' \
   'else' \
@@ -173,7 +177,7 @@ RUN printf '%s\n' '#!/usr/bin/env bash' \
   chmod +x /usr/local/bin/entrypoint.sh && \
   chown ${MAMBA_USER}:${MAMBA_USER} /usr/local/bin/entrypoint.sh
 
-# Expose Jupyter and TensorBoard ports
+# Expose Jupyter and TensorBoard port. (ComfyUI proxied at /proxy/8188/)
 EXPOSE 8888 6006
 
 ENTRYPOINT ["/tini", "--", "/usr/local/bin/entrypoint.sh"]
