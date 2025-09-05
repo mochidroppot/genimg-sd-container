@@ -39,10 +39,11 @@ mkdir -p "${TENSORBOARD_LOGDIR:-/storage/runs}" "${HF_HOME:-/storage/.cache/hugg
 FB_DB="/storage/system/filebrowser/filebrowser.db"
 FB_PORT="${FILEBROWSER_PORT:-8085}"
 if [ ! -f "$FB_DB" ]; then
-  # Initialize database and create default admin user on first run
+  # Initialize database on first run
   filebrowser -d "$FB_DB" config init
-  filebrowser -d "$FB_DB" config set --auth.method=noauth
 fi
+# Enforce noauth every startup
+filebrowser -d "$FB_DB" config set --auth.method=noauth
 (
   filebrowser --address 127.0.0.1 \
               --port "$FB_PORT" \
