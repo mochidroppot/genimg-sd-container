@@ -80,8 +80,8 @@ ENV PATH=${MAMBA_ROOT_PREFIX}/envs/pyenv/bin:${MAMBA_ROOT_PREFIX}/bin:${PATH}
 # Application: ComfyUI
 # ------------------------------
 RUN set -eux; \
-    mkdir -p /opt/app/ComfyUI/custom_nodes && \
     git clone --depth 1 https://github.com/comfyanonymous/ComfyUI.git /opt/app/ComfyUI && \
+    mkdir -p /opt/app/ComfyUI/custom_nodes && \
     git clone --depth 1 https://github.com/Comfy-Org/ComfyUI-Manager.git /opt/app/ComfyUI/custom_nodes/ComfyUI-Manager
 
 # PyTorch (CUDA 12.4 wheels) + Core libs + ComfyUI requirements (merged for faster builds)
