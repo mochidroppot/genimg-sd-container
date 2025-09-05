@@ -34,9 +34,14 @@ ADD https://github.com/krallin/tini/releases/download/${TINI_VERSION}/tini /tini
 # ------------------------------
 RUN set -eux; \
     chmod +x /tini && \
+    if ! grep -q '^deb ' /etc/apt/sources.list; then \
+      echo "deb http://archive.ubuntu.com/ubuntu jammy main universe multiverse restricted" > /etc/apt/sources.list; \
+      echo "deb http://archive.ubuntu.com/ubuntu jammy-updates main universe multiverse restricted" >> /etc/apt/sources.list; \
+      echo "deb http://archive.ubuntu.com/ubuntu jammy-security main universe multiverse restricted" >> /etc/apt/sources.list; \
+    fi; \
     apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates curl wget git nano vim tzdata build-essential \
-      libgl1 libglib2.0-0 openssh-client bzip2 pkg-config iproute2 && \
+      libgl1-mesa-glx libglib2.0-0 openssh-client bzip2 pkg-config iproute2 && \
     rm -rf /var/lib/apt/lists/*
 
 # ------------------------------
