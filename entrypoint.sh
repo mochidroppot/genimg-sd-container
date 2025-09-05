@@ -27,7 +27,7 @@ link_dir "${COMFYUI_APP_BASE}/input" "${WORKSPACE_BASE}/input"
 link_dir "${COMFYUI_APP_BASE}/output" "${WORKSPACE_BASE}/output"
 
 # 2) Ensure cache/log directories exist
-mkdir -p "${TENSORBOARD_LOGDIR:-/storage/runs}" "${HF_HOME:-/storage/.cache/huggingface}" "${PIP_CACHE_DIR:-/storage/.cache/pip}"
+mkdir -p "${TENSORBOARD_LOGDIR:-/storage/runs}" "${HF_HOME:-/storage/.cache/huggingface}" "${PIP_CACHE_DIR:-/storage/.cache/pip}" "/storage/system/filebrowser" "${WORKSPACE_BASE}"
 
 # 3) Start TensorBoard in the background
 (tensorboard --logdir "${TENSORBOARD_LOGDIR:-/storage/runs}" --host 0.0.0.0 --port 6006 >/tmp/tensorboard.log 2>&1 &)
@@ -35,7 +35,24 @@ mkdir -p "${TENSORBOARD_LOGDIR:-/storage/runs}" "${HF_HOME:-/storage/.cache/hugg
 # 4) Start ComfyUI in the background (loopback-only; reachable via JupyterLab proxy at /proxy/${COMFYUI_PORT}/)
 (cd "${COMFYUI_APP_BASE}" && python main.py --listen 127.0.0.1 --port "${COMFYUI_PORT:-8188}" >/tmp/comfyui.log 2>&1 &)
 
-# 5) Execute given command (e.g., from Paperspace), else launch JupyterLab
+# 5) Start Filebrowser in the background (loopback-only; reachable via JupyterLab proxy at /proxy/${FILEBROWSER_PORT}/)
+FB_DB="/storage/system/filebrowser/filebrowser.db"
+FB_PORT="${FILEBROWSER_PORT:-8085}"
+if [ ! -f "$FB_DB" ]; then
+  # Initialize database and create default admin user on first run
+  filebrowser -d "$FB_DB" config init
+  filebrowser -d "$FB_DB" users add admin admin --perm.admin
+fi
+(
+  filebrowser --address 127.0.0.1 \
+              --port "$FB_PORT" \
+              --root "/storage/workspace" \
+              --database "$FB_DB" \
+              --baseurl "/proxy/${FB_PORT}" \
+              >/tmp/filebrowser.log 2>&1 &
+)
+
+# 6) Execute given command (e.g., from Paperspace), else launch JupyterLab
 if [ "$#" -gt 0 ]; then
   exec "$@"
 else

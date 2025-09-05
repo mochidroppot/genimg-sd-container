@@ -92,6 +92,16 @@ RUN set -eux; \
     micromamba clean -a -y
 
 # ------------------------------
+# Filebrowser (binary install)
+# ------------------------------
+RUN set -eux; \
+    mkdir -p /tmp/fb && \
+    curl -fsSL -o /tmp/fb/linux-amd64-filebrowser.tar.gz "https://github.com/filebrowser/filebrowser/releases/latest/download/linux-amd64-filebrowser.tar.gz" && \
+    tar -xzf /tmp/fb/linux-amd64-filebrowser.tar.gz -C /tmp/fb && \
+    install -m 0755 /tmp/fb/filebrowser /usr/local/bin/filebrowser && \
+    rm -rf /tmp/fb
+
+# ------------------------------
 # Non-root user for interactive sessions
 # ------------------------------
 RUN set -eux; \
@@ -113,7 +123,7 @@ ENV CONDA_DEFAULT_ENV=pyenv
 # Healthcheck (Jupyter 8888 / TensorBoard 6006)
 # ------------------------------
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=5 \
-  CMD bash -lc 'ss -ltn | grep -E ":8888|:6006|:8188" >/dev/null || exit 1'
+  CMD bash -lc 'ss -ltn | grep -E ":8888|:6006|:8188|:8085" >/dev/null || exit 1'
 
 # ------------------------------
 # Entrypoint via Tini
@@ -127,7 +137,8 @@ ENV TENSORBOARD_LOGDIR=/storage/runs \
     HUGGINGFACE_HUB_CACHE=/storage/.cache/huggingface \
     TRANSFORMERS_CACHE=/storage/.cache/huggingface \
     PIP_CACHE_DIR=/storage/.cache/pip \
-    COMFYUI_PORT=8188
+    COMFYUI_PORT=8188 \
+    FILEBROWSER_PORT=8085
 
 # Copy entrypoint script
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
