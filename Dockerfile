@@ -144,6 +144,9 @@ ENV TENSORBOARD_LOGDIR=/storage/runs \
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh && chown ${MAMBA_USER}:${MAMBA_USER} /usr/local/bin/entrypoint.sh
 
+# Jupyter Server Proxy launcher entries
+COPY jupyter_server_config.d /usr/local/etc/jupyter/jupyter_server_config.d
+
 # Expose Jupyter and TensorBoard port. (ComfyUI proxied at /proxy/8188/)
 EXPOSE 8888 6006
 
