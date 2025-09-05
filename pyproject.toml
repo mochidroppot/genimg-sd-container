@@ -1,0 +1,23 @@
+[project]
+name = "genimg-sd-servers"
+version = "0.1.0"
+description = "Jupyter server proxy launcher entries for ComfyUI and Filebrowser"
+authors = [{ name = "mochidroppot", email = "mochidroppot@gmail.com" }]
+readme = "LICENSE"
+requires-python = ">=3.8"
+dependencies = [
+    "jupyter-server-proxy>=4.1.0",
+]
+
+[project.entry-points."jupyter_serverproxy_servers"]
+genimg_sd_servers = "genimg_sd_servers:get_servers"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

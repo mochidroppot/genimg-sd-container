@@ -41,7 +41,7 @@ FB_PORT="${FILEBROWSER_PORT:-8085}"
 if [ ! -f "$FB_DB" ]; then
   # Initialize database and create default admin user on first run
   filebrowser -d "$FB_DB" config init
-  filebrowser -d "$FB_DB" users add admin admin --perm.admin
+  filebrowser -d "$FB_DB" config set --auth.method=noauth
 fi
 (
   filebrowser --address 127.0.0.1 \
