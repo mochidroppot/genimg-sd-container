@@ -6,6 +6,8 @@
 # ----------------------------------------------------------------------------
 FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
 
+LABEL maintainer="mochidroppot <mochidroppot@gmail.com>"
+
 # ------------------------------
 # Build-time and runtime settings
 # ------------------------------
@@ -21,19 +23,12 @@ ENV DEBIAN_FRONTEND=noninteractive \
     NVIDIA_DRIVER_CAPABILITIES=compute,utility
 
 # ------------------------------
-# Tini (PID 1 init) for stable process handling inside containers
-# ------------------------------
-ENV TINI_VERSION=v0.19.0
-ADD https://github.com/krallin/tini/releases/download/${TINI_VERSION}/tini /tini
-
-# ------------------------------
 # Base packages
 # - bzip2: extract micromamba tarball
 # - libgl1/libglib2.0-0: common GUI/ML deps
 # - iproute2: provides `ss` used in HEALTHCHECK
 # ------------------------------
 RUN set -eux; \
-    chmod +x /tini && \
     if ! grep -q '^deb ' /etc/apt/sources.list; then \
       echo "deb http://archive.ubuntu.com/ubuntu jammy main universe multiverse restricted" > /etc/apt/sources.list; \
       echo "deb http://archive.ubuntu.com/ubuntu jammy-updates main universe multiverse restricted" >> /etc/apt/sources.list; \
@@ -41,7 +36,7 @@ RUN set -eux; \
     fi; \
     apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates curl wget git nano vim tzdata build-essential \
-      libgl1-mesa-glx libglib2.0-0 openssh-client bzip2 pkg-config iproute2 && \
+      libgl1-mesa-glx libglib2.0-0 openssh-client bzip2 pkg-config iproute2 tini && \
     rm -rf /var/lib/apt/lists/*
 
 # ------------------------------
@@ -76,12 +71,8 @@ ENV PATH=${MAMBA_ROOT_PREFIX}/envs/pyenv/bin:${MAMBA_ROOT_PREFIX}/bin:${PATH}
 
 # ------------------------------
 # Core Python libraries for Notebook workflows
+# (Merged into a single pip install block below for faster builds)
 # ------------------------------
-RUN set -eux; \
-    micromamba run -p ${MAMBA_ROOT_PREFIX}/envs/pyenv pip install \
-      jupyterlab==4.* notebook ipywidgets jupyterlab-git jupyter-server-proxy tensorboard \
-      matplotlib seaborn pandas numpy scipy tqdm rich && \
-    micromamba clean -a -y
 
 # ------------------------------
 # Application: ComfyUI
@@ -90,9 +81,13 @@ RUN set -eux; \
     mkdir -p /opt/app && \
     git clone https://github.com/comfyanonymous/ComfyUI.git /opt/app/ComfyUI
 
-# PyTorch (CUDA 12.4 wheels) + ComfyUI requirements
+# PyTorch (CUDA 12.4 wheels) + Core libs + ComfyUI requirements (merged for faster builds)
 RUN set -eux; \
+    export PIP_NO_CACHE_DIR=0; \
     micromamba run -p ${MAMBA_ROOT_PREFIX}/envs/pyenv pip install --index-url https://download.pytorch.org/whl/cu124 torch torchvision && \
+    micromamba run -p ${MAMBA_ROOT_PREFIX}/envs/pyenv pip install --prefer-binary --upgrade-strategy only-if-needed \
+      jupyterlab==4.* notebook ipywidgets jupyterlab-git jupyter-server-proxy tensorboard \
+      matplotlib seaborn pandas numpy scipy tqdm rich && \
     micromamba run -p ${MAMBA_ROOT_PREFIX}/envs/pyenv pip install -r /opt/app/ComfyUI/requirements.txt && \
     micromamba clean -a -y
 
@@ -155,7 +150,7 @@ COPY jupyter_server_config.d /usr/local/etc/jupyter/jupyter_server_config.d
 # Expose Jupyter and TensorBoard port. (ComfyUI proxied at /proxy/8188/)
 EXPOSE 8888 6006
 
-ENTRYPOINT ["/tini", "--", "/usr/local/bin/entrypoint.sh"]
+ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/entrypoint.sh"]
 USER ${MAMBA_USER}
 
 # Default command (JupyterLab)
