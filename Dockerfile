@@ -29,12 +29,14 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # - iproute2: provides `ss` used in HEALTHCHECK
 # ------------------------------
 RUN set -eux; \
-    if ! grep -q '^deb ' /etc/apt/sources.list; then \
-      echo "deb http://archive.ubuntu.com/ubuntu jammy main universe multiverse restricted" > /etc/apt/sources.list; \
-      echo "deb http://archive.ubuntu.com/ubuntu jammy-updates main universe multiverse restricted" >> /etc/apt/sources.list; \
-      echo "deb http://archive.ubuntu.com/ubuntu jammy-security main universe multiverse restricted" >> /etc/apt/sources.list; \
-    fi; \
-    apt-get update && apt-get install -y --no-install-recommends \
+    codename="$(. /etc/os-release && echo "$VERSION_CODENAME")"; \
+    { \
+      echo "deb https://archive.ubuntu.com/ubuntu ${codename} main universe multiverse restricted"; \
+      echo "deb https://archive.ubuntu.com/ubuntu ${codename}-updates main universe multiverse restricted"; \
+      echo "deb https://security.ubuntu.com/ubuntu ${codename}-security main universe multiverse restricted"; \
+    } > /etc/apt/sources.list; \
+    apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout="30" update && \
+    apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout="30" install -y --no-install-recommends \
       ca-certificates curl wget git nano vim tzdata build-essential \
       libgl1-mesa-glx libglib2.0-0 openssh-client bzip2 pkg-config iproute2 tini && \
     rm -rf /var/lib/apt/lists/*
@@ -78,8 +80,9 @@ ENV PATH=${MAMBA_ROOT_PREFIX}/envs/pyenv/bin:${MAMBA_ROOT_PREFIX}/bin:${PATH}
 # Application: ComfyUI
 # ------------------------------
 RUN set -eux; \
-    mkdir -p /opt/app && \
-    git clone https://github.com/comfyanonymous/ComfyUI.git /opt/app/ComfyUI
+    mkdir -p /opt/app/ComfyUI/custom_nodes && \
+    git clone --depth 1 https://github.com/comfyanonymous/ComfyUI.git /opt/app/ComfyUI && \
+    git clone --depth 1 https://github.com/Comfy-Org/ComfyUI-Manager.git /opt/app/ComfyUI/custom_nodes/ComfyUI-Manager
 
 # PyTorch (CUDA 12.4 wheels) + Core libs + ComfyUI requirements (merged for faster builds)
 RUN set -eux; \
@@ -88,7 +91,12 @@ RUN set -eux; \
     micromamba run -p ${MAMBA_ROOT_PREFIX}/envs/pyenv pip install --prefer-binary --upgrade-strategy only-if-needed \
       jupyterlab==4.* notebook ipywidgets jupyterlab-git jupyter-server-proxy tensorboard \
       matplotlib seaborn pandas numpy scipy tqdm rich && \
-    micromamba run -p ${MAMBA_ROOT_PREFIX}/envs/pyenv pip install -r /opt/app/ComfyUI/requirements.txt && \
+    if [ -f /opt/app/ComfyUI/requirements.txt ]; then \
+      micromamba run -p ${MAMBA_ROOT_PREFIX}/envs/pyenv pip install -r /opt/app/ComfyUI/requirements.txt; \
+    fi; \
+    if [ -f /opt/app/ComfyUI/custom_nodes/ComfyUI-Manager/requirements.txt ]; then \
+      micromamba run -p ${MAMBA_ROOT_PREFIX}/envs/pyenv pip install -r /opt/app/ComfyUI/custom_nodes/ComfyUI-Manager/requirements.txt; \
+    fi; \
     micromamba clean -a -y
 
 # ------------------------------
