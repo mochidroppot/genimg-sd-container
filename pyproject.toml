@@ -10,7 +10,9 @@ dependencies = [
 ]
 
 [project.entry-points."jupyter_serverproxy_servers"]
-genimg_sd_servers = "genimg_sd_servers:get_servers"
+# 各サーバーを個別に設定 - これらの名前がランチャーに表示される
+comfyui = "genimg_sd_servers:get_comfyui_config"
+filebrowser = "genimg_sd_servers:get_filebrowser_config"
 
 [build-system]
 requires = ["setuptools>=61.0"]

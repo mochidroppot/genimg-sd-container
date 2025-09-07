@@ -37,3 +37,11 @@ def get_servers():
             },
         },
     }
+
+def get_comfyui_config():
+    servers = get_servers()
+    return servers["comfyui"]
+
+def get_filebrowser_config():
+    servers = get_servers()
+    return servers["filebrowser"]
