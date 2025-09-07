@@ -43,13 +43,13 @@ if [ ! -f "$FB_DB" ]; then
   filebrowser -d "$FB_DB" config init
 fi
 # Enforce noauth every startup
-filebrowser -d "$FB_DB" config set --auth.method=noauth
+filebrowser -d "$FB_DB" config set --auth.method noauth
 (
   filebrowser --address 127.0.0.1 \
               --port "$FB_PORT" \
               --root "/storage/workspace" \
               --database "$FB_DB" \
-              --baseurl "/proxy/${FB_PORT}" \
+              --baseurl "/proxy/absolute/${FB_PORT}" \
               >/tmp/filebrowser.log 2>&1 &
 )
 

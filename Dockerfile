@@ -37,7 +37,7 @@ RUN set -eux; \
     } > /etc/apt/sources.list; \
     apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout="30" update && \
     apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout="30" install -y --no-install-recommends \
-      ca-certificates curl wget git nano vim tzdata build-essential \
+      ca-certificates curl wget git nano vim zip unzip tzdata build-essential \
       libgl1-mesa-glx libglib2.0-0 openssh-client bzip2 pkg-config iproute2 tini ffmpeg && \
     rm -rf /var/lib/apt/lists/*
 
