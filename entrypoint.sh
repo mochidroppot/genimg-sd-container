@@ -49,7 +49,7 @@ filebrowser -d "$FB_DB" config set --auth.method noauth
               --port "$FB_PORT" \
               --root "/storage/workspace" \
               --database "$FB_DB" \
-              --baseurl "/proxy/absolute/${FB_PORT}" \
+              --baseurl "/filebrowser" \
               >/tmp/filebrowser.log 2>&1 &
 )
 
