@@ -24,7 +24,7 @@ def get_servers():
             "absolute_url": False,
             "launcher_entry": {
                 "title": "ComfyUI",
-                "category": "Tools",
+                "category": "Notebook",
                 "icon_path": _get_icon_path("comfyui"),
                 "enabled": True,
             },
@@ -35,7 +35,7 @@ def get_servers():
             "absolute_url": True,
             "launcher_entry": {
                 "title": "Filebrowser",
-                "category": "Tools",
+                "category": "Notebook",
                 "icon_path": _get_icon_path("filebrowser"),
                 "enabled": True,
             },
