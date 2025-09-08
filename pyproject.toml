@@ -15,15 +15,11 @@ comfyui = "genimg_sd_servers:get_comfyui_config"
 filebrowser = "genimg_sd_servers:get_filebrowser_config"
 
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
-
-[tool.setuptools]
-package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["genimg_sd_servers*"]
 
 [tool.setuptools.package-data]
-genimg_sd_servers = ["icons/*.svg"]
+"*" = ["*.svg"]
