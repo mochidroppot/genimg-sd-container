@@ -153,9 +153,9 @@ COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh && chown ${MAMBA_USER}:${MAMBA_USER} /usr/local/bin/entrypoint.sh
 
 # Install local jupyter-server-proxy entrypoints package
-COPY pyproject.toml /tmp/genimg-sd-servers/pyproject.toml
-COPY src /tmp/genimg-sd-servers/src
-RUN micromamba run -p ${MAMBA_ROOT_PREFIX}/envs/pyenv pip install /tmp/genimg-sd-servers && rm -rf /tmp/genimg-sd-servers
+COPY pyproject.toml /tmp/paperspace-stable-diffusion-suite/pyproject.toml
+COPY src /tmp/paperspace-stable-diffusion-suite/src
+RUN micromamba run -p ${MAMBA_ROOT_PREFIX}/envs/pyenv pip install /tmp/paperspace-stable-diffusion-suite && rm -rf /tmp/paperspace-stable-diffusion-suite
 
 # Expose Jupyter and TensorBoard port. (ComfyUI proxied at /proxy/8188/)
 EXPOSE 8888 6006

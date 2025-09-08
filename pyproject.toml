@@ -1,5 +1,5 @@
 [project]
-name = "genimg-sd-servers"
+name = "paperspace-stable-diffusion-suite"
 version = "0.1.0"
 description = "Jupyter server proxy launcher entries for ComfyUI and Filebrowser"
 authors = [{ name = "mochidroppot", email = "mochidroppot@gmail.com" }]
@@ -11,8 +11,8 @@ dependencies = [
 
 [project.entry-points."jupyter_serverproxy_servers"]
 # 各サーバーを個別に設定 - これらの名前がランチャーに表示される
-comfyui = "genimg_sd_servers:get_comfyui_config"
-filebrowser = "genimg_sd_servers:get_filebrowser_config"
+comfyui = "paperspace_stable_diffusion_suite:get_comfyui_config"
+filebrowser = "paperspace_stable_diffusion_suite:get_filebrowser_config"
 
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
