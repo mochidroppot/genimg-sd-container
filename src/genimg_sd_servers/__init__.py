@@ -19,9 +19,10 @@ def get_servers():
             "command": [
                 "python",
                 "/opt/app/ComfyUI/main.py",
-                "--listen 127.0.0.1",
-                "--port {port}",
-                ">/tmp/comfyui.log 2>&1"
+                "--listen",
+                "127.0.0.1",
+                "--port",
+                "{port}"
             ],
             "timeout": 30,
             "new_browser_tab": True,
@@ -36,12 +37,16 @@ def get_servers():
         "filebrowser": {
             "command": [
                 "filebrowser",
-                "--address 127.0.0.1",
-                "--port {port}",
-                "--root /storage/workspace",
-                "--database /storage/system/filebrowser/filebrowser.db",
-                "--baseurl /filebrowser",
-                ">/tmp/filebrowser.log 2>&1 &"
+                "--address",
+                "127.0.0.1",
+                "--port",
+                "{port}",
+                "--root",
+                "/storage/workspace",
+                "--database",
+                "/storage/system/filebrowser/filebrowser.db",
+                "--baseurl",
+                "/filebrowser"
             ],
             "new_browser_tab": True,
             "absolute_url": True,
