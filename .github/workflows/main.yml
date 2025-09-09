@@ -12,6 +12,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Free Disk Space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: false
+          swap-storage: true
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -42,3 +53,10 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Clean up Docker artifacts
+        if: always()
+        run: |
+          docker system prune -af --volumes
+          echo "ビルド後の利用可能なディスク容量："
+          df -h
