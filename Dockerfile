@@ -1,8 +1,8 @@
 # ----------------------------------------------------------------------------
-# Image for Paperspace Notebook (GPU) running JupyterLab + ComfyUI + TensorBoard
+# Image for Paperspace Notebook (GPU) running JupyterLab
 # - Base: NVIDIA CUDA 12.4 runtime (Ubuntu 22.04) with cuDNN
 # - Package manager: micromamba (conda-compatible)
-# - Default: launches JupyterLab on port 8888 and TensorBoard on port 6006
+# - Default: launches JupyterLab on port 8888
 # ----------------------------------------------------------------------------
 FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
 
@@ -20,7 +20,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     NVIDIA_VISIBLE_DEVICES=all \
-    NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility \
+    MAMBA_ROOT_PREFIX=/opt/conda
 
 # ------------------------------
 # Base packages
@@ -44,7 +45,6 @@ RUN set -eux; \
 # ------------------------------
 # micromamba (system-wide)
 # ------------------------------
-ENV MAMBA_ROOT_PREFIX=/opt/conda
 # Retrieve micromamba and install to /usr/local/bin; fall back to install.sh if layout changes
 RUN set -eux; \
     mkdir -p ${MAMBA_ROOT_PREFIX}; \
@@ -68,13 +68,7 @@ RUN set -eux; \
     micromamba run -p ${MAMBA_ROOT_PREFIX}/envs/pyenv python -m pip install --upgrade pip && \
     micromamba clean -a -y
 
-# All following conda/pip operations should use micromamba run -p
 ENV PATH=${MAMBA_ROOT_PREFIX}/envs/pyenv/bin:${MAMBA_ROOT_PREFIX}/bin:${PATH}
-
-# ------------------------------
-# Core Python libraries for Notebook workflows
-# (Merged into a single pip install block below for faster builds)
-# ------------------------------
 
 # ------------------------------
 # Application: ComfyUI
@@ -84,7 +78,7 @@ RUN set -eux; \
     mkdir -p /opt/app/ComfyUI/custom_nodes && \
     git clone --depth 1 https://github.com/Comfy-Org/ComfyUI-Manager.git /opt/app/ComfyUI/custom_nodes/ComfyUI-Manager
 
-# PyTorch (CUDA 12.4 wheels) + Core libs + ComfyUI requirements (merged for faster builds)
+# PyTorch (CUDA 12.4 wheels) + Core libs + ComfyUI requirements
 RUN set -eux; \
     export PIP_NO_CACHE_DIR=0; \
     micromamba run -p ${MAMBA_ROOT_PREFIX}/envs/pyenv pip install --index-url https://download.pytorch.org/whl/cu124 torch torchvision && \
@@ -100,7 +94,7 @@ RUN set -eux; \
     micromamba clean -a -y
 
 # ------------------------------
-# Filebrowser (binary install)
+# Filebrowser
 # ------------------------------
 RUN set -eux; \
     mkdir -p /tmp/fb && \
@@ -128,25 +122,16 @@ ENV PATH=${MAMBA_ROOT_PREFIX}/envs/pyenv/bin:${MAMBA_ROOT_PREFIX}/bin:${PATH}
 ENV CONDA_DEFAULT_ENV=pyenv
 
 # ------------------------------
-# Healthcheck (Jupyter 8888 / TensorBoard 6006)
+# Healthcheck (Jupyter 8888)
 # ------------------------------
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=5 \
-  CMD bash -lc 'ss -ltn | grep -E ":8888|:6006|:8188|:8085" >/dev/null || exit 1'
+  CMD bash -lc 'ss -ltn | grep -E ":8888" >/dev/null || exit 1'
 
 # ------------------------------
 # Entrypoint via Tini
 # ------------------------------
 USER root
-WORKDIR /workspace
-
-# Cache directories (Paperspace persistent volume typically mounted at /storage)
-ENV TENSORBOARD_LOGDIR=/storage/runs \
-    HF_HOME=/storage/.cache/huggingface \
-    HUGGINGFACE_HUB_CACHE=/storage/.cache/huggingface \
-    TRANSFORMERS_CACHE=/storage/.cache/huggingface \
-    PIP_CACHE_DIR=/storage/.cache/pip \
-    COMFYUI_PORT=8188 \
-    FILEBROWSER_PORT=8085
+WORKDIR /notebook
 
 # Copy entrypoint script
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
@@ -157,8 +142,8 @@ COPY pyproject.toml /tmp/paperspace-stable-diffusion-suite/pyproject.toml
 COPY src /tmp/paperspace-stable-diffusion-suite/src
 RUN micromamba run -p ${MAMBA_ROOT_PREFIX}/envs/pyenv pip install /tmp/paperspace-stable-diffusion-suite && rm -rf /tmp/paperspace-stable-diffusion-suite
 
-# Expose Jupyter and TensorBoard port. (ComfyUI proxied at /proxy/8188/)
-EXPOSE 8888 6006
+# Expose Jupyter port.
+EXPOSE 8888
 
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/entrypoint.sh"]
 USER ${MAMBA_USER}

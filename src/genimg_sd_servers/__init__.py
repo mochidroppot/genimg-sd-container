@@ -14,12 +14,16 @@ def _port_from_env(name: str, default: int) -> int:
         return default
 
 def get_servers():
-    comfy_port = _port_from_env("COMFYUI_PORT", 8188)
-    fb_port = _port_from_env("FILEBROWSER_PORT", 8085)
-    # command/timeout は省略（プロセス起動はせず、リンク遷移のみ）
     return {
         "comfyui": {
-            "port": comfy_port,
+            "command": [
+                "python",
+                "/opt/app/ComfyUI/main.py",
+                "--listen 127.0.0.1",
+                "--port {port}",
+                ">/tmp/comfyui.log 2>&1"
+            ],
+            "timeout": 30,
             "new_browser_tab": True,
             "absolute_url": False,
             "launcher_entry": {
@@ -30,7 +34,15 @@ def get_servers():
             },
         },
         "filebrowser": {
-            "port": fb_port,
+            "command": [
+                "filebrowser",
+                "--address 127.0.0.1",
+                "--port {port}",
+                "--root /storage/workspace",
+                "--database /storage/system/filebrowser/filebrowser.db",
+                "--baseurl /filebrowser",
+                ">/tmp/filebrowser.log 2>&1 &"
+            ],
             "new_browser_tab": True,
             "absolute_url": True,
             "launcher_entry": {
