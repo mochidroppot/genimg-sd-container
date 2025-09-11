@@ -15,6 +15,22 @@ def _port_from_env(name: str, default: int) -> int:
 
 def get_servers():
     return {
+        "studio": {
+            "command": [
+                "studio",
+                "--port",
+                "{port}",
+                "--base-url",
+                "/studio"
+            ],
+            "new_browser_tab": True,
+            "absolute_url": True,
+            "launcher_entry": {
+                "title": "Studio",
+                "category": "Notebook",
+                "enabled": True,
+            },
+        },
         "comfyui": {
             "command": [
                 "python",
@@ -58,6 +74,10 @@ def get_servers():
             },
         },
     }
+
+def get_studio_config():
+    servers = get_servers()
+    return servers["studio"]
 
 def get_comfyui_config():
     servers = get_servers()
