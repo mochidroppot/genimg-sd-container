@@ -110,7 +110,7 @@ RUN set -eux; \
   mkdir -p /tmp/studio && \
   curl -fsSL -o /tmp/studio/studio.zip "https://github.com/mochidroppot/paperspace-stable-diffusion-station/releases/latest/download/paperspace-stable-diffusion-station-linux-amd64.zip" && \
   unzip /tmp/studio/studio.zip -d /tmp/studio && \
-  install -m 0755 /tmp/studio/studio /usr/local/bin/studio && \
+  install -m 0755 /tmp/studio/studio/studio /usr/local/bin/studio && \
   rm -rf /tmp/studio
 
 # ------------------------------
