@@ -74,9 +74,10 @@ ENV PATH=${MAMBA_ROOT_PREFIX}/envs/pyenv/bin:${MAMBA_ROOT_PREFIX}/bin:${PATH}
 # Application: ComfyUI
 # ------------------------------
 RUN set -eux; \
-    git clone --depth 1 https://github.com/comfyanonymous/ComfyUI.git /opt/app/ComfyUI && \
+    git clone https://github.com/comfyanonymous/ComfyUI.git /opt/app/ComfyUI && \
     mkdir -p /opt/app/ComfyUI/custom_nodes && \
-    git clone --depth 1 https://github.com/Comfy-Org/ComfyUI-Manager.git /opt/app/ComfyUI/custom_nodes/ComfyUI-Manager
+    git clone https://github.com/Comfy-Org/ComfyUI-Manager.git /opt/app/ComfyUI/custom_nodes/ComfyUI-Manager && \
+    git config --global --add safe.directory /opt/app/ComfyUI
 
 # PyTorch (CUDA 12.4 wheels) + Core libs + ComfyUI requirements
 RUN set -eux; \
@@ -120,7 +121,8 @@ RUN set -eux; \
     useradd -m -s /bin/bash ${MAMBA_USER}; \
     chown -R ${MAMBA_USER}:${MAMBA_USER} /home/${MAMBA_USER}; \
     chown -R ${MAMBA_USER}:${MAMBA_USER} ${MAMBA_ROOT_PREFIX}; \
-    chown -R ${MAMBA_USER}:${MAMBA_USER} /opt/app
+    chown -R ${MAMBA_USER}:${MAMBA_USER} /opt/app && \
+    sudo -u ${MAMBA_USER} git config --global --add safe.directory /opt/app/ComfyUI
 
 # Workspace directories for notebooks and data
 RUN mkdir -p /workspace /workspace/data /workspace/notebooks

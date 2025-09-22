@@ -3,7 +3,7 @@ set -euo pipefail
 
 WORKSPACE_BASE="/storage/workspace"
 COMFYUI_APP_BASE="/opt/app/ComfyUI"
-mkdir -p "/storage/system/filebrowser" "${WORKSPACE_BASE}/custom_nodes" "${WORKSPACE_BASE}/input" "${WORKSPACE_BASE}/output"
+mkdir -p "/storage/system/filebrowser" "${WORKSPACE_BASE}/input" "${WORKSPACE_BASE}/output"
 
 link_dir() {
   local src="$1"; local dst="$2";
@@ -17,7 +17,6 @@ link_dir() {
   ln -sfn "$dst" "$src"
 }
 
-link_dir "${COMFYUI_APP_BASE}/custom_nodes" "${WORKSPACE_BASE}/custom_nodes"
 link_dir "${COMFYUI_APP_BASE}/input" "${WORKSPACE_BASE}/input"
 link_dir "${COMFYUI_APP_BASE}/output" "${WORKSPACE_BASE}/output"
 
