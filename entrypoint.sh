@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-WORKSPACE_BASE="/storage/workspace"
+NOTEBOOKS_WORKSPACE_BASE="/notebooks/workspace"
+STORAGE_SYSTEM_BASE="/storage/system"
+FILEBROWSER_SYSTEM_BASE="${STORAGE_SYSTEM_BASE}/filebrowser"
+COMFYUI_SYSTEM_BASE="${STORAGE_SYSTEM_BASE}/comfyui"
 COMFYUI_APP_BASE="/opt/app/ComfyUI"
-mkdir -p "/storage/system/filebrowser" "${WORKSPACE_BASE}/input" "${WORKSPACE_BASE}/output"
+mkdir -p "${FILEBROWSER_SYSTEM_BASE}" "${NOTEBOOKS_WORKSPACE_BASE}/input" "${NOTEBOOKS_WORKSPACE_BASE}/output" "${COMFYUI_SYSTEM_BASE}/user"
 
 link_dir() {
   local src="$1"; local dst="$2";
@@ -17,10 +20,11 @@ link_dir() {
   ln -sfn "$dst" "$src"
 }
 
-link_dir "${COMFYUI_APP_BASE}/input" "${WORKSPACE_BASE}/input"
-link_dir "${COMFYUI_APP_BASE}/output" "${WORKSPACE_BASE}/output"
+link_dir "${COMFYUI_APP_BASE}/input" "${NOTEBOOKS_WORKSPACE_BASE}/input"
+link_dir "${COMFYUI_APP_BASE}/output" "${NOTEBOOKS_WORKSPACE_BASE}/output"
+link_dir "${COMFYUI_APP_BASE}/user" "${COMFYUI_SYSTEM_BASE}/user"
 
-FB_DB="/storage/system/filebrowser/filebrowser.db"
+FB_DB="${FILEBROWSER_SYSTEM_BASE}/filebrowser.db"
 if [ ! -f "$FB_DB" ]; then
   # Initialize database on first run
   filebrowser -d "$FB_DB" config init
