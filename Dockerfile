@@ -147,6 +147,10 @@ WORKDIR /notebook
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh && chown ${MAMBA_USER}:${MAMBA_USER} /usr/local/bin/entrypoint.sh
 
+# Install ComfyUI ProxyFix extension
+COPY ComfyUI-ProxyFix /tmp/ComfyUI-ProxyFix
+RUN micromamba run -p ${MAMBA_ROOT_PREFIX}/envs/pyenv pip install /tmp/ComfyUI-ProxyFix && rm -rf /tmp/ComfyUI-ProxyFix
+
 # Install local jupyter-server-proxy entrypoints package
 COPY pyproject.toml /tmp/paperspace-stable-diffusion-suite/pyproject.toml
 COPY src /tmp/paperspace-stable-diffusion-suite/src

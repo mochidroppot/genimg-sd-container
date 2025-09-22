@@ -43,9 +43,6 @@ def get_servers():
             "timeout": 30,
             "new_browser_tab": True,
             "absolute_url": False,
-            "mappath": {
-                "/api/userdata/workflows/": "/api/userdata/workflows%2F"
-            },
             "launcher_entry": {
                 "title": "ComfyUI",
                 "category": "Notebook",
