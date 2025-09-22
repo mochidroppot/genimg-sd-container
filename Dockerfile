@@ -121,8 +121,14 @@ RUN set -eux; \
     useradd -m -s /bin/bash ${MAMBA_USER}; \
     chown -R ${MAMBA_USER}:${MAMBA_USER} /home/${MAMBA_USER}; \
     chown -R ${MAMBA_USER}:${MAMBA_USER} ${MAMBA_ROOT_PREFIX}; \
-    chown -R ${MAMBA_USER}:${MAMBA_USER} /opt/app && \
-    sudo -u ${MAMBA_USER} git config --global --add safe.directory /opt/app/ComfyUI
+    chown -R ${MAMBA_USER}:${MAMBA_USER} /opt/app
+
+# Configure git for the mambauser
+USER ${MAMBA_USER}
+RUN git config --global --add safe.directory /opt/app/ComfyUI
+
+# Switch back to root for workspace setup
+USER root
 
 # Workspace directories for notebooks and data
 RUN mkdir -p /workspace /workspace/data /workspace/notebooks
