@@ -58,7 +58,7 @@ def get_servers():
                 "--port",
                 "{port}",
                 "--root",
-                "/storage/workspace",
+                "/notebooks/workspace",
                 "--database",
                 "/storage/system/filebrowser/filebrowser.db",
                 "--baseurl",
