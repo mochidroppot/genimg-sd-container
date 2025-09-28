@@ -1,12 +1,34 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+MAMBA_ROOT_PREFIX=/opt/conda
 NOTEBOOKS_WORKSPACE_BASE="/notebooks/workspace"
 STORAGE_SYSTEM_BASE="/storage/system"
 FILEBROWSER_SYSTEM_BASE="${STORAGE_SYSTEM_BASE}/filebrowser"
 COMFYUI_SYSTEM_BASE="${STORAGE_SYSTEM_BASE}/comfyui"
 COMFYUI_APP_BASE="/opt/app/ComfyUI"
 mkdir -p "${FILEBROWSER_SYSTEM_BASE}" "${NOTEBOOKS_WORKSPACE_BASE}/input" "${NOTEBOOKS_WORKSPACE_BASE}/output" "${COMFYUI_SYSTEM_BASE}/user"
+
+# Optionally update ComfyUI repo to the latest on container start
+# Set COMFYUI_AUTO_UPDATE=0 to disable
+update_comfyui() {
+  local auto="${COMFYUI_AUTO_UPDATE:-1}"
+  if [ "$auto" = "0" ] || [ "$auto" = "false" ]; then
+    return 0
+  fi
+  if [ ! -d "${COMFYUI_APP_BASE}/.git" ]; then
+    return 0
+  fi
+  if ! command -v git >/dev/null 2>&1; then
+    echo "WARN: git not available; skipping ComfyUI update" >&2
+    return 0
+  fi
+  echo "Updating ComfyUI in ${COMFYUI_APP_BASE} ..."
+  git pull --ff-only origin master
+  micromamba run -p ${MAMBA_ROOT_PREFIX}/envs/pyenv pip install -r /opt/app/ComfyUI/requirements.txt
+}
+
+update_comfyui
 
 link_dir() {
   local src="$1"; local dst="$2";

@@ -77,12 +77,13 @@ RUN set -eux; \
     git clone https://github.com/comfyanonymous/ComfyUI.git /opt/app/ComfyUI && \
     mkdir -p /opt/app/ComfyUI/custom_nodes && \
     git clone https://github.com/Comfy-Org/ComfyUI-Manager.git /opt/app/ComfyUI/custom_nodes/ComfyUI-Manager && \
+    git clone https://github.com/mit-han-lab/ComfyUI-nunchaku /opt/app/ComfyUI/custom_nodes/nunchaku_nodes && \
     git config --global --add safe.directory /opt/app/ComfyUI
 
 # PyTorch (CUDA 12.4 wheels) + Core libs + ComfyUI requirements
 RUN set -eux; \
     export PIP_NO_CACHE_DIR=0; \
-    micromamba run -p ${MAMBA_ROOT_PREFIX}/envs/pyenv pip install --index-url https://download.pytorch.org/whl/cu124 torch torchvision && \
+    micromamba run -p ${MAMBA_ROOT_PREFIX}/envs/pyenv pip install --index-url https://download.pytorch.org/whl/cu124 torch torchvision torchaudio && \
     micromamba run -p ${MAMBA_ROOT_PREFIX}/envs/pyenv pip install --prefer-binary --upgrade-strategy only-if-needed \
       jupyterlab==4.* notebook ipywidgets jupyterlab-git jupyter-server-proxy tensorboard \
       matplotlib seaborn pandas numpy scipy tqdm rich && \
@@ -92,6 +93,7 @@ RUN set -eux; \
     if [ -f /opt/app/ComfyUI/custom_nodes/ComfyUI-Manager/requirements.txt ]; then \
       micromamba run -p ${MAMBA_ROOT_PREFIX}/envs/pyenv pip install -r /opt/app/ComfyUI/custom_nodes/ComfyUI-Manager/requirements.txt; \
     fi; \
+    micromamba run -p ${MAMBA_ROOT_PREFIX}/envs/pyenv python -m pip install https://github.com/nunchaku-tech/nunchaku/releases/download/v0.3.1/nunchaku-0.3.1+torch2.7-cp311-cp311-linux_x86_64.whl; \
     micromamba clean -a -y
 
 # ------------------------------
