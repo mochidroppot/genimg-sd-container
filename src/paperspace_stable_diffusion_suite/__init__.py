@@ -16,15 +16,9 @@ def _port_from_env(name: str, default: int) -> int:
 def get_servers():
     return {
         "studio": {
-            "command": [
-                "studio",
-                "--port",
-                "{port}",
-                "--base-url",
-                "/studio"
-            ],
             "new_browser_tab": True,
             "absolute_url": True,
+            "port": _port_from_env("STUDIO_PORT", 8765),
             "launcher_entry": {
                 "title": "Studio",
                 "category": "Notebook",
@@ -32,17 +26,10 @@ def get_servers():
             },
         },
         "comfyui": {
-            "command": [
-                "python",
-                "/opt/app/ComfyUI/main.py",
-                "--listen",
-                "127.0.0.1",
-                "--port",
-                "{port}"
-            ],
             "timeout": 30,
             "new_browser_tab": True,
             "absolute_url": False,
+            "port": _port_from_env("COMFYUI_PORT", 8189),
             "launcher_entry": {
                 "title": "ComfyUI",
                 "category": "Notebook",
@@ -51,21 +38,9 @@ def get_servers():
             },
         },
         "filebrowser": {
-            "command": [
-                "filebrowser",
-                "--address",
-                "127.0.0.1",
-                "--port",
-                "{port}",
-                "--root",
-                "/notebooks/workspace",
-                "--database",
-                "/storage/system/filebrowser/filebrowser.db",
-                "--baseurl",
-                "/filebrowser"
-            ],
             "new_browser_tab": True,
             "absolute_url": True,
+            "port": _port_from_env("FILEBROWSER_PORT", 8766),
             "launcher_entry": {
                 "title": "Filebrowser",
                 "category": "Notebook",

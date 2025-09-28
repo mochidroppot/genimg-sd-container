@@ -54,6 +54,24 @@ fi
 # Enforce noauth every startup
 filebrowser -d "$FB_DB" config set --auth.method noauth
 
+echo "Starting ComfyUI service..."
+cd "${COMFYUI_APP_BASE}"
+nohup python main.py --listen 127.0.0.1 --port 8189 > /tmp/comfyui.log 2>&1 &
+COMFYUI_PID=$!
+echo "ComfyUI started with PID: $COMFYUI_PID (port 8189)"
+
+# Start Filebrowser service in background
+echo "Starting Filebrowser service..."
+nohup filebrowser --address 127.0.0.1 --port 8766 --root "${NOTEBOOKS_WORKSPACE_BASE}" --database "${FB_DB}" --baseurl /filebrowser > /tmp/filebrowser.log 2>&1 &
+FILEBROWSER_PID=$!
+echo "Filebrowser started with PID: $FILEBROWSER_PID (port 8766)"
+
+# Start Studio service in background
+echo "Starting Studio service..."
+nohup studio --port 8765 --base-url /studio > /tmp/studio.log 2>&1 &
+STUDIO_PID=$!
+echo "Studio started with PID: $STUDIO_PID (port 8765)"
+
 if [ "$#" -gt 0 ]; then
   exec "$@"
 else
