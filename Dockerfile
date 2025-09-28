@@ -93,7 +93,7 @@ RUN set -eux; \
     if [ -f /opt/app/ComfyUI/custom_nodes/ComfyUI-Manager/requirements.txt ]; then \
       micromamba run -p ${MAMBA_ROOT_PREFIX}/envs/pyenv pip install -r /opt/app/ComfyUI/custom_nodes/ComfyUI-Manager/requirements.txt; \
     fi; \
-    micromamba run -p ${MAMBA_ROOT_PREFIX}/envs/pyenv python -m pip install https://github.com/nunchaku-tech/nunchaku/releases/download/v0.3.1/nunchaku-0.3.1+torch2.7-cp311-cp311-linux_x86_64.whl; \
+    micromamba run -p ${MAMBA_ROOT_PREFIX}/envs/pyenv python -m pip install https://github.com/nunchaku-tech/nunchaku/releases/download/v1.0.0/nunchaku-1.0.0+torch2.6-cp311-cp311-linux_x86_64.whl; \
     micromamba clean -a -y
 
 # ------------------------------
