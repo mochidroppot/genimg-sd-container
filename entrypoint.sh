@@ -24,6 +24,7 @@ update_comfyui() {
     return 0
   fi
   echo "Updating ComfyUI in ${COMFYUI_APP_BASE} ..."
+  cd "${COMFYUI_APP_BASE}"
   git pull --ff-only origin master
   micromamba run -p ${MAMBA_ROOT_PREFIX}/envs/pyenv pip install -r /opt/app/ComfyUI/requirements.txt
 }
