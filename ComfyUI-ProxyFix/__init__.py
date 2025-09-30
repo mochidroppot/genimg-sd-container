@@ -56,7 +56,7 @@ async def proxy_fix_middleware(request, handler):
     """
     aiohttp middleware to convert workflows__SLASH__ back to workflows/ in request paths.
 
-    This middleware modifies the request path before routing occurs.
+    This middleware wraps the handler to modify match_info after routing.
     """
     original_path = str(request.rel_url.path) if hasattr(request.rel_url, 'path') else request.path
 
@@ -64,41 +64,52 @@ async def proxy_fix_middleware(request, handler):
     if '/userdata/' in original_path and SLASH_REPLACEMENT in original_path:
         print(f"[ComfyUI-ProxyFix] Middleware: Detected __SLASH__ in path: {original_path}")
         
-        # Convert the path back
-        new_path = convert_workflow_path_back(original_path)
-        
-        if new_path != original_path:
-            print(f"[ComfyUI-ProxyFix] Middleware: Converting path: {original_path} -> {new_path}")
+        # Wrap the handler to intercept after routing
+        async def fixed_handler(req):
+            # At this point, routing has occurred and match_info is populated
+            print(f"[ComfyUI-ProxyFix] After routing, match_info BEFORE fix: {dict(req.match_info)}")
             
-            # Modify the request's path by updating ALL internal caches
-            try:
-                # Build a new URL with the corrected path
-                new_url = request.rel_url.with_path(new_path)
-                
-                # Force update ALL internal URL-related attributes
-                object.__setattr__(request, '_rel_url', new_url)
-                
-                # Clear all cached properties to force recalculation
-                for attr in ['_path', '_raw_path', '_query_string', '_post', '_read_bytes']:
-                    if hasattr(request, attr):
+            # Convert all match_info values
+            from aiohttp.web_urldispatcher import MatchInfoError
+            
+            # Check if routing was successful (not a 404)
+            if not isinstance(req.match_info, MatchInfoError):
+                for key in list(req.match_info.keys()):
+                    value = req.match_info[key]
+                    if isinstance(value, str) and SLASH_REPLACEMENT in value:
+                        new_value = convert_workflow_path_back(value)
+                        print(f"[ComfyUI-ProxyFix] Converting match_info['{key}']: {value} -> {new_value}")
+                        
+                        # Force update the match_info dictionary
+                        # Try multiple methods to ensure it sticks
                         try:
-                            delattr(request, attr)
-                        except:
-                            pass
+                            # Method 1: Direct assignment
+                            req.match_info[key] = new_value
+                            
+                            # Method 2: Update internal dict if it exists
+                            if hasattr(req.match_info, '_match_dict'):
+                                req.match_info._match_dict[key] = new_value
+                            
+                            # Method 3: Update via __setitem__ if available  
+                            if hasattr(req.match_info, '__setitem__'):
+                                req.match_info.__setitem__(key, new_value)
+                                
+                            print(f"[ComfyUI-ProxyFix] Successfully updated match_info['{key}']")
+                        except Exception as e:
+                            print(f"[ComfyUI-ProxyFix] Error updating match_info: {e}")
                 
-                # Verify the change took effect
-                print(f"[ComfyUI-ProxyFix] Middleware: Modified request.path = {request.path}")
-                print(f"[ComfyUI-ProxyFix] Middleware: Modified request.rel_url = {request.rel_url}")
-                
-            except Exception as e:
-                print(f"[ComfyUI-ProxyFix] Middleware: Error modifying request: {e}")
-                import traceback
-                traceback.print_exc()
+                print(f"[ComfyUI-ProxyFix] After routing, match_info AFTER fix: {dict(req.match_info)}")
+            else:
+                print(f"[ComfyUI-ProxyFix] Routing error occurred: {req.match_info}")
+            
+            # Call the actual handler
+            return await handler(req)
+        
+        # Call our wrapped handler
+        return await fixed_handler(request)
 
-    # Continue with the request
-    response = await handler(request)
-    
-    return response
+    # For non-userdata requests, process normally
+    return await handler(request)
 
 
 def wrap_userdata_routes(app):
@@ -110,22 +121,34 @@ def wrap_userdata_routes(app):
     """
     wrapped_count = 0
     
+    print(f"[ComfyUI-ProxyFix] Inspecting all routes in the app...")
     for route in app.router.routes():
-        # Check if this is a userdata route
-        route_info = route.get_info()
-        if 'path' in route_info or 'formatter' in route_info:
-            path = route_info.get('path', '') or route_info.get('formatter', '')
+        # Get route information
+        try:
+            route_info = route.get_info()
+            route_path = str(route_info.get('path', route_info.get('formatter', '')))
             
-            if '/userdata/' in str(path) or '/api/userdata/' in str(path):
-                print(f"[ComfyUI-ProxyFix] Found userdata route: {path}")
+            # Log all routes for debugging
+            print(f"[ComfyUI-ProxyFix] Found route: {route_path} (type: {type(route).__name__})")
+            
+            # Check if this is a userdata route (check multiple patterns)
+            is_userdata_route = (
+                'userdata' in route_path or
+                '/api/userdata' in route_path or
+                hasattr(route, '_handler') and route._handler is not None
+            )
+            
+            if is_userdata_route and hasattr(route, '_handler'):
+                print(f"[ComfyUI-ProxyFix] Wrapping route: {route_path}")
                 
                 # Wrap the handler
                 original_handler = route._handler
                 
                 def create_wrapped_handler(orig_handler):
                     async def wrapped_handler(request):
-                        # Log original match_info
-                        print(f"[ComfyUI-ProxyFix] Route handler called: {dict(request.match_info)}")
+                        # Log the request
+                        print(f"[ComfyUI-ProxyFix] Handler called for: {request.path}")
+                        print(f"[ComfyUI-ProxyFix] match_info: {dict(request.match_info)}")
                         
                         # Check and convert match_info parameters
                         modified = False
@@ -139,12 +162,12 @@ def wrap_userdata_routes(app):
                                         request.match_info._match_dict[key] = new_value
                                     request.match_info[key] = new_value
                                     modified = True
-                                    print(f"[ComfyUI-ProxyFix] Route handler: Converted {key}: {value} -> {new_value}")
+                                    print(f"[ComfyUI-ProxyFix] Converted {key}: {value} -> {new_value}")
                                 except Exception as e:
                                     print(f"[ComfyUI-ProxyFix] Failed to modify match_info: {e}")
                         
                         if modified:
-                            print(f"[ComfyUI-ProxyFix] Route handler: Updated match_info = {dict(request.match_info)}")
+                            print(f"[ComfyUI-ProxyFix] Updated match_info: {dict(request.match_info)}")
                         
                         # Call original handler
                         return await orig_handler(request)
@@ -154,8 +177,12 @@ def wrap_userdata_routes(app):
                 # Apply the wrapper
                 route._handler = create_wrapped_handler(original_handler)
                 wrapped_count += 1
+                
+        except Exception as e:
+            print(f"[ComfyUI-ProxyFix] Error inspecting route: {e}")
+            continue
     
-    print(f"[ComfyUI-ProxyFix] Wrapped {wrapped_count} userdata routes")
+    print(f"[ComfyUI-ProxyFix] Wrapped {wrapped_count} routes")
     return wrapped_count > 0
 
 
