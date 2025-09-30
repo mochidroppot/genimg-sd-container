@@ -1,239 +1,154 @@
 """
-ComfyUI Proxy Fix Extension
+ComfyUI ProxyFix Extension
 
 This extension fixes the URL encoding issue when ComfyUI is accessed through 
-jupyter-server-proxy or other reverse proxies that decode URL-encoded paths.
+jupyter-server-proxy or other reverse proxies that decode URL-encoded slashes.
+
+The fix works in two parts:
+1. Frontend (JavaScript): Converts workflows/ to workflows__SLASH__ in API calls
+2. Backend (Python): Converts workflows__SLASH__ back to workflows/ before processing
+
+The __SLASH__ separator is unique and won't conflict with user filenames.
 """
 
 import os
-import sys
 import re
-from pathlib import Path
-from urllib.parse import unquote, quote
+from aiohttp import web
 
-class ProxyFixMiddleware:
-    """Middleware to fix proxy-related URL path issues"""
+# Tell ComfyUI where to find our web extension files
+# This is critical - without this, the JavaScript won't be loaded
+WEB_DIRECTORY = "./web"
 
-    def __init__(self, app):
-        self.app = app
-        self.name = "ProxyFix"
-        self.version = "1.0.0"
+# ComfyUI requires these exports even if we don't define any custom nodes
+NODE_CLASS_MAPPINGS = {}
+NODE_DISPLAY_NAME_MAPPINGS = {}
 
-    def __call__(self, environ, start_response):
-        """WSGI middleware to fix paths before they reach ComfyUI"""
-        path_info = environ.get('PATH_INFO', '')
-        request_uri = environ.get('REQUEST_URI', '')
+# Unique separator that matches the frontend (must be identical)
+SLASH_REPLACEMENT = '__SLASH__'
 
-        # Check if this is a userdata/workflows request that needs fixing
-        if self._needs_path_fix(path_info):
-            fixed_path = self._fix_workflows_path(path_info)
-            if fixed_path != path_info:
-                print(f"[ProxyFix] Path fixed: {path_info} -> {fixed_path}")
-                environ['PATH_INFO'] = fixed_path
-                # Also update REQUEST_URI if present
-                if request_uri:
-                    environ['REQUEST_URI'] = request_uri.replace(path_info, fixed_path)
 
-        return self.app(environ, start_response)
+def convert_workflow_path_back(path):
+    """
+    Convert workflows__SLASH__ back to workflows/ in the path.
 
-    def _needs_path_fix(self, path):
-        """Check if the path needs fixing"""
-        # Match paths like /comfyui/api/userdata/workflows/something.json
-        pattern = r'^/comfyui/api/userdata/workflows/[^/]+\.json$'
-        return bool(re.match(pattern, path))
+    This reverses the frontend transformation, ensuring files are saved
+    in the correct workflows/ directory as users expect.
 
-    def _fix_workflows_path(self, path):
-        """Fix the workflows path by encoding the last slash"""
-        # Replace the last slash before the filename with %2F
-        # /comfyui/api/userdata/workflows/default.json -> /comfyui/api/userdata/workflows%2Fdefault.json
-        match = re.match(r'^(/comfyui/api/userdata/workflows)/([^/]+\.json)$', path)
-        if match:
-            base_path = match.group(1)
-            filename = match.group(2)
-            return f"{base_path}%2F{filename}"
+    The __SLASH__ marker is unique and won't conflict with underscores
+    in user filenames (e.g., my_workflow.json).
+
+    Examples:
+        'workflows__SLASH__test.json' -> 'workflows/test.json'
+        'userdata/workflows__SLASH__my_flow.json' -> 'userdata/workflows/my_flow.json'
+        'workflows__SLASH__my_workflow_v2.json' -> 'workflows/my_workflow_v2.json' (safe!)
+    """
+    # Replace workflows__SLASH__ with workflows/
+    if SLASH_REPLACEMENT in path:
+        # Use replace() to handle all occurrences, though typically there's only one
+        path = path.replace(f'workflows{SLASH_REPLACEMENT}', 'workflows/')
         return path
+    return path
 
 
-class ProxyFixExtension:
-    """Extension to fix proxy-related URL encoding issues"""
+@web.middleware
+async def proxy_fix_middleware(request, handler):
+    """
+    aiohttp middleware to convert workflows__SLASH__ back to workflows/ in request paths.
 
-    def __init__(self):
-        self.name = "ProxyFix"
-        self.version = "1.0.0"
-        self.description = "Fixes URL encoding issues with reverse proxies"
-        self.middleware_applied = False
+    This middleware intercepts all requests to /userdata/ endpoints and converts
+    the frontend's workflows__SLASH__ transformation back to workflows/ so that ComfyUI
+    can process the request normally.
+    """
+    original_path = request.path
 
-    def apply_middleware_patch(self):
-        """Apply middleware patch to ComfyUI server"""
-        try:
-            # Try to find and patch ComfyUI's main server application
-            import server
+    # Only process userdata requests that contain workflows__SLASH__
+    if '/userdata/' in original_path and SLASH_REPLACEMENT in original_path:
+        # Convert the path back
+        new_path = convert_workflow_path_back(original_path)
 
-            # Check if the server has a web app attribute
-            if hasattr(server, 'app') and server.app is not None:
-                # Wrap the existing app with our middleware
-                if not self.middleware_applied:
-                    server.app = ProxyFixMiddleware(server.app)
-                    self.middleware_applied = True
-                    print(f"[ProxyFix] Middleware applied to ComfyUI server")
+        if new_path != original_path:
+            print(f"[ComfyUI-ProxyFix] Backend path conversion: {original_path} -> {new_path}")
+
+            # Create a new request with the modified path
+            # We need to update the match_info as well for route matching
+            request = request.clone(rel_url=new_path)
+
+    # Continue with the request
+    return await handler(request)
+
+
+def apply_middleware():
+    """
+    Apply the proxy fix middleware to the ComfyUI server.
+
+    This function is called during ComfyUI initialization to inject our
+    middleware into the aiohttp application.
+    """
+    try:
+        import server
+
+        # Get the PromptServer instance
+        if hasattr(server, 'PromptServer') and hasattr(server.PromptServer, 'instance'):
+            prompt_server = server.PromptServer.instance
+
+            if prompt_server is not None and hasattr(prompt_server, 'app'):
+                # Get the aiohttp app
+                app = prompt_server.app
+
+                # Check if middleware is already applied
+                if proxy_fix_middleware not in app.middlewares:
+                    # Insert at the beginning to catch requests early
+                    app.middlewares.insert(0, proxy_fix_middleware)
+                    print("[ComfyUI-ProxyFix] Backend middleware applied successfully")
+                    return True
+                else:
+                    print("[ComfyUI-ProxyFix] Backend middleware already applied")
                     return True
 
-            # Alternative approach: patch the server creation function
-            if hasattr(server, 'create_app') or hasattr(server, 'PromptServer'):
-                self._patch_server_creation()
-                return True
+        print("[ComfyUI-ProxyFix] Warning: Could not find PromptServer instance")
+        return False
 
-            print(f"[ProxyFix] Could not find ComfyUI server to patch")
-            return False
-
-        except ImportError:
-            print(f"[ProxyFix] ComfyUI server module not found")
-            return False
-        except Exception as e:
-            print(f"[ProxyFix] Failed to apply middleware patch: {e}")
-            return False
-
-    def _patch_server_creation(self):
-        """Patch server creation to include our middleware"""
-        try:
-            import server
-
-            # If PromptServer class exists, monkey patch it
-            if hasattr(server, 'PromptServer'):
-                original_init = server.PromptServer.__init__
-
-                def patched_init(self, loop):
-                    result = original_init(self, loop)
-                    # Apply middleware to the web app
-                    if hasattr(self, 'app') and self.app is not None:
-                        self.app = ProxyFixMiddleware(self.app)
-                        print(f"[ProxyFix] Middleware applied to PromptServer")
-                    return result
-
-                server.PromptServer.__init__ = patched_init
-                self.middleware_applied = True
-                return True
-
-        except Exception as e:
-            print(f"[ProxyFix] Error patching server creation: {e}")
-            return False
-
-    def apply_aiohttp_middleware(self):
-        """Apply middleware for aiohttp-based ComfyUI server"""
-        try:
-            import server
-            import aiohttp.web
-
-            @aiohttp.web.middleware
-            async def proxy_fix_middleware(request, handler):
-                """aiohttp middleware to fix proxy path issues"""
-                raw_path = request.path  # no query string
-                query = request.query_string
-
-                # Check if this path needs fixing
-                pattern = r'^/comfyui/api/userdata/workflows/[^/]+\.json$'
-                if re.match(pattern, raw_path):
-                    # Create a new path with fixed slash
-                    fixed_path = re.sub(
-                        r'^(/comfyui/api/userdata/workflows)/([^/]+\.json)$',
-                        r'\1%2F\2',
-                        raw_path
-                    )
-                    if fixed_path != raw_path:
-                        fixed_full = fixed_path + (f"?{query}" if query else "")
-                        print(f"[ProxyFix] Path fixed: {raw_path}{('?' + query) if query else ''} -> {fixed_full}")
-                        # Build new relative URL preserving query
-                        from yarl import URL
-                        new_rel = URL.build(path=fixed_path, query_string=query)
-                        request = request.clone(rel_url=new_rel)
-
-                return await handler(request)
-
-            # Try to add middleware to existing server
-            if hasattr(server, 'PromptServer') and hasattr(server.PromptServer, 'middlewares'):
-                server.PromptServer.middlewares.append(proxy_fix_middleware)
-                print(f"[ProxyFix] aiohttp middleware added")
-                return True
-
-        except Exception as e:
-            print(f"[ProxyFix] Failed to apply aiohttp middleware: {e}")
-            return False
-
-    def apply_route_patch(self):
-        """Apply route-level patch for ComfyUI API"""
-        try:
-            import server
-
-            # Find the userdata route handler
-            if hasattr(server, 'PromptServer'):
-                prompt_server = server.PromptServer
-
-                # Look for existing route handlers
-                if hasattr(prompt_server, 'routes') or hasattr(prompt_server, 'app'):
-                    # Patch the specific userdata handler
-                    self._patch_userdata_routes(prompt_server)
-                    return True
-
-        except Exception as e:
-            print(f"[ProxyFix] Failed to apply route patch: {e}")
-            return False
-
-    def _patch_userdata_routes(self, server_instance):
-        """Patch userdata routes specifically"""
-        try:
-            # This would require more specific knowledge of ComfyUI's routing
-            # For now, we'll use a more general approach
-            pass
-        except Exception as e:
-            print(f"[ProxyFix] Error patching userdata routes: {e}")
-
-    def _needs_path_fix(self, path):
-        """Check if the path needs fixing"""
-        # Match paths like /comfyui/api/userdata/workflows/something.json
-        pattern = r'^/comfyui/api/userdata/workflows/[^/]+\.json$'
-        return bool(re.match(pattern, path))
-
-    def _fix_workflows_path(self, path):
-        """Fix the workflows path by encoding the last slash"""
-        # Replace the last slash before the filename with %2F
-        # /comfyui/api/userdata/workflows/default.json -> /comfyui/api/userdata/workflows%2Fdefault.json
-        match = re.match(r'^(/comfyui/api/userdata/workflows)/([^/]+\.json)$', path)
-        if match:
-            base_path = match.group(1)
-            filename = match.group(2)
-            return f"{base_path}%2F{filename}"
-        return path
+    except ImportError:
+        print("[ComfyUI-ProxyFix] Warning: server module not found (might load later)")
+        return False
+    except Exception as e:
+        print(f"[ComfyUI-ProxyFix] Error applying backend middleware: {e}")
+        return False
 
 
-# Global instance
-proxy_fix = ProxyFixExtension()
+# Try to apply middleware immediately
+# If server is not loaded yet, we'll try again in a delayed thread
+middleware_applied = apply_middleware()
 
-def initialize_proxy_fix():
-    """Initialize the proxy fix extension"""
-    success = False
-
-    # Try different patching methods in order of preference
-    if proxy_fix.apply_middleware_patch():
-        success = True
-    elif proxy_fix.apply_aiohttp_middleware():
-        success = True
-    elif proxy_fix.apply_route_patch():
-        success = True
-
-    if not success:
-        print(f"[ProxyFix] Warning: Could not apply any patches. Extension may not work correctly.")
-
-    return success
-
-# Auto-initialize when imported
-if __name__ != "__main__":
-    # Delay initialization to ensure ComfyUI modules are loaded
+if not middleware_applied:
+    # Delay initialization to ensure ComfyUI server is loaded
     import threading
     import time
 
     def delayed_init():
-        time.sleep(2)  # Wait for ComfyUI to initialize
-        initialize_proxy_fix()
+        """Retry applying middleware after a delay"""
+        max_retries = 5
+        retry_delay = 2
+
+        for attempt in range(max_retries):
+            time.sleep(retry_delay)
+            print(f"[ComfyUI-ProxyFix] Retry {attempt + 1}/{max_retries}: Attempting to apply backend middleware...")
+
+            if apply_middleware():
+                print("[ComfyUI-ProxyFix] Backend middleware applied after delayed retry")
+                return
+
+        print("[ComfyUI-ProxyFix] Warning: Failed to apply backend middleware after all retries")
+        print("[ComfyUI-ProxyFix] Frontend fix will still work, but workflows may be saved with 'workflows_' prefix")
 
     thread = threading.Thread(target=delayed_init, daemon=True)
     thread.start()
+
+# Print confirmation that the extension is loaded
+print("[ComfyUI-ProxyFix] Extension loaded successfully")
+print(f"[ComfyUI-ProxyFix] Web directory: {WEB_DIRECTORY}")
+print(f"[ComfyUI-ProxyFix] Using separator: {SLASH_REPLACEMENT}")
+print(f"[ComfyUI-ProxyFix] Frontend: workflows/ -> workflows{SLASH_REPLACEMENT} (in URLs)")
+print(f"[ComfyUI-ProxyFix] Backend: workflows{SLASH_REPLACEMENT} -> workflows/ (before processing)")
+
+__all__ = ['NODE_CLASS_MAPPINGS', 'NODE_DISPLAY_NAME_MAPPINGS', 'WEB_DIRECTORY']

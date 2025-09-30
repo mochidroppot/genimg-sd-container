@@ -1,5 +1,43 @@
 # ComfyUI Proxy Fix Extension
+# ComfyUI ProxyFix Extension
 
+This extension fixes URL encoding issues when ComfyUI is accessed through reverse proxies like `jupyter-server-proxy`.
+
+## Problem
+
+When ComfyUI saves workflows, it uses paths like `workflows/filename.json`. This causes issues when:
+
+1. The frontend URL-encodes the path as `workflows%2Ffilename.json`
+2. `jupyter-server-proxy` automatically decodes `%2F` back to `/`
+3. ComfyUI's router receives `workflows/filename.json` and interprets it as a subdirectory
+4. API calls fail with routing errors
+
+## Solution
+
+This extension applies fixes at both frontend and backend:
+
+### Frontend (JavaScript)
+- Intercepts all `fetch()` API calls to `/api/userdata/`
+- Replaces `workflows/` with `workflows_` before sending requests
+- Keeps the path flat, avoiding URL encoding issues entirely
+
+### Backend (Python)
+- Provides fallback path normalization for any server-side routing
+- Ensures consistent behavior across different proxy configurations
+
+## Installation
+
+This extension is automatically installed as a ComfyUI custom node in the Docker image.
+
+Files:
+- `web/fix-workflow-slash.js` - Frontend extension
+- `__init__.py` - Backend middleware (fallback)
+
+## Usage
+
+No configuration needed. The extension activates automatically when ComfyUI starts.
+
+You can verify it's working by checking the browser console:
 This extension fixes URL encoding issues that occur when ComfyUI is accessed through reverse proxies like jupyter-server-proxy.
 
 ## Problem

@@ -160,6 +160,7 @@ RUN chmod +x /usr/local/bin/entrypoint.sh && chown ${MAMBA_USER}:${MAMBA_USER} /
 
 # Install ComfyUI ProxyFix extension as a custom node (single copy)
 COPY ComfyUI-ProxyFix /opt/app/ComfyUI/custom_nodes/ComfyUI-ProxyFix
+RUN chown -R ${MAMBA_USER}:${MAMBA_USER} /opt/app/ComfyUI/custom_nodes/ComfyUI-ProxyFix
 
 # Install local jupyter-server-proxy entrypoints package
 COPY pyproject.toml /tmp/paperspace-stable-diffusion-suite/pyproject.toml
