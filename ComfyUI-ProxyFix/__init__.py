@@ -58,22 +58,39 @@ async def proxy_fix_middleware(request, handler):
     This middleware intercepts all requests to /userdata/ endpoints and converts
     the frontend's workflows__SLASH__ transformation back to workflows/ so that ComfyUI
     can process the request normally.
+    
+    We need to modify the request's match_info AFTER routing but BEFORE the handler.
+    Since middleware runs before routing, we wrap the handler to intercept after routing.
     """
     original_path = request.path
 
     # Only process userdata requests that contain workflows__SLASH__
     if '/userdata/' in original_path and SLASH_REPLACEMENT in original_path:
-        # Convert the path back
-        new_path = convert_workflow_path_back(original_path)
+        print(f"[ComfyUI-ProxyFix] Detected __SLASH__ in path: {original_path}")
+        
+        # Wrap the handler to modify match_info after routing
+        async def wrapped_handler(req):
+            # At this point, routing has happened and match_info is populated
+            print(f"[ComfyUI-ProxyFix] match_info before: {dict(req.match_info)}")
+            
+            # Convert all match_info values that contain __SLASH__
+            modified = False
+            for key, value in list(req.match_info.items()):
+                if isinstance(value, str) and SLASH_REPLACEMENT in value:
+                    new_value = convert_workflow_path_back(value)
+                    req.match_info[key] = new_value
+                    print(f"[ComfyUI-ProxyFix] Converted match_info['{key}']: {value} -> {new_value}")
+                    modified = True
+            
+            if modified:
+                print(f"[ComfyUI-ProxyFix] match_info after: {dict(req.match_info)}")
+            
+            # Call the original handler with modified match_info
+            return await handler(req)
+        
+        return await wrapped_handler(request)
 
-        if new_path != original_path:
-            print(f"[ComfyUI-ProxyFix] Backend path conversion: {original_path} -> {new_path}")
-
-            # Create a new request with the modified path
-            # We need to update the match_info as well for route matching
-            request = request.clone(rel_url=new_path)
-
-    # Continue with the request
+    # For requests that don't need path conversion, process normally
     return await handler(request)
 
 
