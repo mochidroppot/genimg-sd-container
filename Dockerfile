@@ -155,7 +155,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=5 \
 # Entrypoint via Tini
 # ------------------------------
 USER root
-WORKDIR /notebook
+WORKDIR /notebooks
 
 # Copy entrypoint script
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh

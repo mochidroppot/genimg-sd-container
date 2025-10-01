@@ -24,9 +24,11 @@ update_comfyui() {
     return 0
   fi
   echo "Updating ComfyUI in ${COMFYUI_APP_BASE} ..."
-  cd "${COMFYUI_APP_BASE}"
-  git pull --ff-only origin master
-  micromamba run -p ${MAMBA_ROOT_PREFIX}/envs/pyenv pip install -r /opt/app/ComfyUI/requirements.txt
+  (
+    cd "${COMFYUI_APP_BASE}"
+    git pull --ff-only origin master
+    micromamba run -p ${MAMBA_ROOT_PREFIX}/envs/pyenv pip install -r /opt/app/ComfyUI/requirements.txt
+  )
 }
 
 update_comfyui
@@ -48,42 +50,44 @@ update_preinstalled_nodes() {
     local node_path="${NOTEBOOKS_WORKSPACE_BASE}/custom_nodes/${node}"
     if [ -d "$node_path/.git" ]; then
       echo "Updating pre-installed custom node: $node ..."
-      cd "$node_path"
-      
-      # Marker file to track if dependencies were installed
-      local deps_marker=".deps_installed"
-      local is_first_run=false
-      if [ ! -f "$deps_marker" ]; then
-        is_first_run=true
-      fi
-      
-      # Hash requirements.txt before update (if exists)
-      local req_hash_before=""
-      if [ -f "requirements.txt" ]; then
-        req_hash_before=$(md5sum requirements.txt 2>/dev/null | cut -d' ' -f1)
-      fi
-      
-      # Update the node
-      git pull --ff-only origin master 2>/dev/null || git pull --ff-only origin main 2>/dev/null || true
-      
-      # Check if requirements.txt changed or is new
-      local needs_install=false
-      if [ -f "requirements.txt" ]; then
-        local req_hash_after=$(md5sum requirements.txt 2>/dev/null | cut -d' ' -f1)
-        if [ "$is_first_run" = true ]; then
-          needs_install=true
-          echo "  → First run, ensuring dependencies are installed..."
-        elif [ "$req_hash_before" != "$req_hash_after" ]; then
-          needs_install=true
-          echo "  → requirements.txt changed, installing dependencies..."
+      (
+        cd "$node_path"
+        
+        # Marker file to track if dependencies were installed
+        local deps_marker=".deps_installed"
+        local is_first_run=false
+        if [ ! -f "$deps_marker" ]; then
+          is_first_run=true
         fi
-      fi
-      
-      # Install dependencies only if needed
-      if [ "$needs_install" = true ]; then
-        micromamba run -p ${MAMBA_ROOT_PREFIX}/envs/pyenv pip install --upgrade-strategy only-if-needed -r requirements.txt
-        touch "$deps_marker"
-      fi
+        
+        # Hash requirements.txt before update (if exists)
+        local req_hash_before=""
+        if [ -f "requirements.txt" ]; then
+          req_hash_before=$(md5sum requirements.txt 2>/dev/null | cut -d' ' -f1)
+        fi
+        
+        # Update the node
+        git pull --ff-only origin master 2>/dev/null || git pull --ff-only origin main 2>/dev/null || true
+        
+        # Check if requirements.txt changed or is new
+        local needs_install=false
+        if [ -f "requirements.txt" ]; then
+          local req_hash_after=$(md5sum requirements.txt 2>/dev/null | cut -d' ' -f1)
+          if [ "$is_first_run" = true ]; then
+            needs_install=true
+            echo "  → First run, ensuring dependencies are installed..."
+          elif [ "$req_hash_before" != "$req_hash_after" ]; then
+            needs_install=true
+            echo "  → requirements.txt changed, installing dependencies..."
+          fi
+        fi
+        
+        # Install dependencies only if needed
+        if [ "$needs_install" = true ]; then
+          micromamba run -p ${MAMBA_ROOT_PREFIX}/envs/pyenv pip install --upgrade-strategy only-if-needed -r requirements.txt
+          touch "$deps_marker"
+        fi
+      )
     fi
   done
 }
@@ -123,6 +127,7 @@ echo "Starting ComfyUI service..."
 cd "${COMFYUI_APP_BASE}"
 nohup python main.py --listen 127.0.0.1 --port 8189 > /tmp/comfyui.log 2>&1 &
 COMFYUI_PID=$!
+cd /notebooks
 echo "ComfyUI started with PID: $COMFYUI_PID (port 8189)"
 
 # Start Filebrowser service in background
