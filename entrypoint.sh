@@ -7,7 +7,7 @@ STORAGE_SYSTEM_BASE="/storage/system"
 FILEBROWSER_SYSTEM_BASE="${STORAGE_SYSTEM_BASE}/filebrowser"
 COMFYUI_SYSTEM_BASE="${STORAGE_SYSTEM_BASE}/comfyui"
 COMFYUI_APP_BASE="/opt/app/ComfyUI"
-mkdir -p "${FILEBROWSER_SYSTEM_BASE}" "${NOTEBOOKS_WORKSPACE_BASE}/input" "${NOTEBOOKS_WORKSPACE_BASE}/output" "${COMFYUI_SYSTEM_BASE}/user"
+mkdir -p "${FILEBROWSER_SYSTEM_BASE}" "${NOTEBOOKS_WORKSPACE_BASE}/input" "${NOTEBOOKS_WORKSPACE_BASE}/output" "${NOTEBOOKS_WORKSPACE_BASE}/custom_nodes" "${NOTEBOOKS_WORKSPACE_BASE}/user" "${NOTEBOOKS_WORKSPACE_BASE}/users"
 
 # Optionally update ComfyUI repo to the latest on container start
 # Set COMFYUI_AUTO_UPDATE=0 to disable
@@ -31,13 +31,72 @@ update_comfyui() {
 
 update_comfyui
 
+# Update pre-installed custom nodes
+update_preinstalled_nodes() {
+  local auto="${COMFYUI_CUSTOM_NODES_AUTO_UPDATE:-1}"
+  if [ "$auto" = "0" ] || [ "$auto" = "false" ]; then
+    return 0
+  fi
+  
+  local nodes=(
+    "ComfyUI-Manager"
+    "nunchaku_nodes"
+    "ComfyUI-ProxyFix"
+  )
+  
+  for node in "${nodes[@]}"; do
+    local node_path="${NOTEBOOKS_WORKSPACE_BASE}/custom_nodes/${node}"
+    if [ -d "$node_path/.git" ]; then
+      echo "Updating pre-installed custom node: $node ..."
+      cd "$node_path"
+      
+      # Marker file to track if dependencies were installed
+      local deps_marker=".deps_installed"
+      local is_first_run=false
+      if [ ! -f "$deps_marker" ]; then
+        is_first_run=true
+      fi
+      
+      # Hash requirements.txt before update (if exists)
+      local req_hash_before=""
+      if [ -f "requirements.txt" ]; then
+        req_hash_before=$(md5sum requirements.txt 2>/dev/null | cut -d' ' -f1)
+      fi
+      
+      # Update the node
+      git pull --ff-only origin master 2>/dev/null || git pull --ff-only origin main 2>/dev/null || true
+      
+      # Check if requirements.txt changed or is new
+      local needs_install=false
+      if [ -f "requirements.txt" ]; then
+        local req_hash_after=$(md5sum requirements.txt 2>/dev/null | cut -d' ' -f1)
+        if [ "$is_first_run" = true ]; then
+          needs_install=true
+          echo "  → First run, ensuring dependencies are installed..."
+        elif [ "$req_hash_before" != "$req_hash_after" ]; then
+          needs_install=true
+          echo "  → requirements.txt changed, installing dependencies..."
+        fi
+      fi
+      
+      # Install dependencies only if needed
+      if [ "$needs_install" = true ]; then
+        micromamba run -p ${MAMBA_ROOT_PREFIX}/envs/pyenv pip install --upgrade-strategy only-if-needed -r requirements.txt
+        touch "$deps_marker"
+      fi
+    fi
+  done
+}
+
 link_dir() {
   local src="$1"; local dst="$2";
   if [ -L "$src" ]; then return 0; fi
   if [ -d "$src" ] && [ -n "$(ls -A "$src" 2>/dev/null || true)" ]; then
     echo "Migrating existing data from $src to $dst ..."
     mkdir -p "$dst"
-    cp -a "$src"/. "$dst"/
+    # -n: do not overwrite existing files (no-clobber)
+    # This preserves user-added custom_nodes while adding pre-installed ones on first run
+    cp -an "$src"/. "$dst"/ 2>/dev/null || true
     rm -rf "$src"
   fi
   ln -sfn "$dst" "$src"
@@ -45,7 +104,12 @@ link_dir() {
 
 link_dir "${COMFYUI_APP_BASE}/input" "${NOTEBOOKS_WORKSPACE_BASE}/input"
 link_dir "${COMFYUI_APP_BASE}/output" "${NOTEBOOKS_WORKSPACE_BASE}/output"
-link_dir "${COMFYUI_APP_BASE}/user" "${COMFYUI_SYSTEM_BASE}/user"
+link_dir "${COMFYUI_APP_BASE}/custom_nodes" "${NOTEBOOKS_WORKSPACE_BASE}/custom_nodes"
+link_dir "${COMFYUI_APP_BASE}/user" "${NOTEBOOKS_WORKSPACE_BASE}/user"
+link_dir "${COMFYUI_APP_BASE}/users" "${NOTEBOOKS_WORKSPACE_BASE}/users"
+
+# Update pre-installed custom nodes after linking
+update_preinstalled_nodes
 
 FB_DB="${FILEBROWSER_SYSTEM_BASE}/filebrowser.db"
 if [ ! -f "$FB_DB" ]; then
