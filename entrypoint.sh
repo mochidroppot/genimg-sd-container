@@ -7,7 +7,7 @@ STORAGE_SYSTEM_BASE="/storage/system"
 FILEBROWSER_SYSTEM_BASE="${STORAGE_SYSTEM_BASE}/filebrowser"
 COMFYUI_SYSTEM_BASE="${STORAGE_SYSTEM_BASE}/comfyui"
 COMFYUI_APP_BASE="/opt/app/ComfyUI"
-mkdir -p "${FILEBROWSER_SYSTEM_BASE}" "${NOTEBOOKS_WORKSPACE_BASE}/input" "${NOTEBOOKS_WORKSPACE_BASE}/output" "${NOTEBOOKS_WORKSPACE_BASE}/custom_nodes" "${NOTEBOOKS_WORKSPACE_BASE}/user" "${NOTEBOOKS_WORKSPACE_BASE}/users"
+mkdir -p "${FILEBROWSER_SYSTEM_BASE}" "${NOTEBOOKS_WORKSPACE_BASE}/input" "${NOTEBOOKS_WORKSPACE_BASE}/output" "${NOTEBOOKS_WORKSPACE_BASE}/custom_nodes" "${NOTEBOOKS_WORKSPACE_BASE}/user"
 
 # Optionally update ComfyUI repo to the latest on container start
 # Set COMFYUI_AUTO_UPDATE=0 to disable
@@ -110,7 +110,6 @@ link_dir "${COMFYUI_APP_BASE}/input" "${NOTEBOOKS_WORKSPACE_BASE}/input"
 link_dir "${COMFYUI_APP_BASE}/output" "${NOTEBOOKS_WORKSPACE_BASE}/output"
 link_dir "${COMFYUI_APP_BASE}/custom_nodes" "${NOTEBOOKS_WORKSPACE_BASE}/custom_nodes"
 link_dir "${COMFYUI_APP_BASE}/user" "${NOTEBOOKS_WORKSPACE_BASE}/user"
-link_dir "${COMFYUI_APP_BASE}/users" "${NOTEBOOKS_WORKSPACE_BASE}/users"
 
 # Update pre-installed custom nodes after linking
 update_preinstalled_nodes
