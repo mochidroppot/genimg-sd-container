@@ -77,7 +77,8 @@ RUN set -eux; \
     git clone https://github.com/comfyanonymous/ComfyUI.git /opt/app/ComfyUI && \
     mkdir -p /opt/app/ComfyUI/custom_nodes && \
     git clone https://github.com/Comfy-Org/ComfyUI-Manager.git /opt/app/ComfyUI/custom_nodes/ComfyUI-Manager && \
-    git clone https://github.com/mit-han-lab/ComfyUI-nunchaku /opt/app/ComfyUI/custom_nodes/nunchaku_nodes && \
+    git clone https://github.com/mit-han-lab/ComfyUI-nunchaku.git /opt/app/ComfyUI/custom_nodes/nunchaku_nodes && \
+    git clone https://github.com/mochidroppot/ComfyUI-ProxyFix.git /opt/app/ComfyUI/custom_nodes/ComfyUI-ProxyFix && \
     git config --global --add safe.directory /opt/app/ComfyUI
 
 # PyTorch (CUDA 12.4 wheels) + Core libs + ComfyUI requirements
@@ -92,6 +93,9 @@ RUN set -eux; \
     fi; \
     if [ -f /opt/app/ComfyUI/custom_nodes/ComfyUI-Manager/requirements.txt ]; then \
       micromamba run -p ${MAMBA_ROOT_PREFIX}/envs/pyenv pip install -r /opt/app/ComfyUI/custom_nodes/ComfyUI-Manager/requirements.txt; \
+    fi; \
+    if [ -f /opt/app/ComfyUI/custom_nodes/ComfyUI-ProxyFix/requirements.txt ]; then \
+      micromamba run -p ${MAMBA_ROOT_PREFIX}/envs/pyenv pip install -r /opt/app/ComfyUI/custom_nodes/ComfyUI-ProxyFix/requirements.txt; \
     fi; \
     micromamba run -p ${MAMBA_ROOT_PREFIX}/envs/pyenv python -m pip install https://github.com/nunchaku-tech/nunchaku/releases/download/v1.0.0/nunchaku-1.0.0+torch2.6-cp311-cp311-linux_x86_64.whl; \
     micromamba clean -a -y
@@ -156,12 +160,6 @@ WORKDIR /notebook
 # Copy entrypoint script
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh && chown ${MAMBA_USER}:${MAMBA_USER} /usr/local/bin/entrypoint.sh
-
-
-# Install ComfyUI ProxyFix extension as a custom node (single copy)
-COPY ComfyUI-ProxyFix /opt/app/ComfyUI/custom_nodes/ComfyUI-ProxyFix
-RUN chown -R ${MAMBA_USER}:${MAMBA_USER} /opt/app/ComfyUI/custom_nodes/ComfyUI-ProxyFix
-
 # Install local jupyter-server-proxy entrypoints package
 COPY pyproject.toml /tmp/paperspace-stable-diffusion-suite/pyproject.toml
 COPY src /tmp/paperspace-stable-diffusion-suite/src
